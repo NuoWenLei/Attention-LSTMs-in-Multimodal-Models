@@ -15,7 +15,7 @@ name: str = "GraphAttentionLSTMModel"):
 
 	x = input_nodes
 
-	for i in range(len(layer_units)):
+	for i in range(len(layer_units) - 1):
 		mhgaLSTM_cell = MultiHeadGraphAttentionLSTMCell(
 			units = layer_units[i],
 			num_heads = num_heads,
