@@ -1,20 +1,19 @@
-from typing import Iterable
-from datetime import date
-from MultiHeadGraphAttentionLSTMCell import MultiHeadGraphAttentionLSTMCell, tf
-from tqdm import tqdm
-import pandas as pd, networkx as nx, matplotlib.pyplot as plt, numpy as np
+from imports import tf, Iterable, date, tqdm, pd, nx, plt, np
+from MultiHeadGraphAttentionLSTMCell import MultiHeadGraphAttentionLSTMCell
 
 def create_graph_attention_lstm_model(layer_units: Iterable,
 num_heads: int,
+input_shape_nodes: tuple,
+input_shape_edges: tuple,
 sequence_length: int,
-output_size: int,
+hidden_size: int,
 residual: bool,
 use_bias: bool,
 concat_output: bool = False,
 name: str = "GraphAttentionLSTMModel"):
 
-	input_nodes = tf.keras.layers.Input(shape = (7, 49, 5))
-	input_adj_mats = tf.keras.layers.Input(shape = (7, 49, 49))
+	input_nodes = tf.keras.layers.Input(shape = input_shape_nodes)
+	input_adj_mats = tf.keras.layers.Input(shape = input_shape_edges)
 
 	x = input_nodes
 
@@ -23,7 +22,7 @@ name: str = "GraphAttentionLSTMModel"):
 			units = layer_units[i],
 			num_heads = num_heads,
 			sequence_length = sequence_length,
-			output_size = output_size,
+			output_size = hidden_size,
 			residual = residual,
 			concat_output = concat_output,
 			use_bias = use_bias,
@@ -47,7 +46,7 @@ name: str = "GraphAttentionLSTMModel"):
 
 	mhgaLSTM_2 = tf.keras.layers.RNN(mhgaLSTM_out_cell)((x, input_adj_mats))
 
-	return tf.keras.models.Model(inputs = [input_nodes, input_adj_mats], outputs = mhgaLSTM_2)
+	return tf.keras.models.Model(inputs = [input_nodes, input_adj_mats], outputs = mhgaLSTM_2, name = name)
 
 def load_data(covid_data_path, flight_data_path):
 	flight_df = pd.read_csv(flight_data_path)

@@ -1,4 +1,5 @@
-from GraphAttentionHead import GraphAttentionHead, tf
+from GraphAttentionHead import GraphAttentionHead
+from imports import tf
 
 class MultiHeadGraphAttention(tf.keras.layers.Layer):
   

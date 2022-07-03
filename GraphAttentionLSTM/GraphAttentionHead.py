@@ -1,4 +1,4 @@
-import tensorflow as tf
+from imports import tf
 
 class GraphAttentionHead(tf.keras.layers.Layer):
 
