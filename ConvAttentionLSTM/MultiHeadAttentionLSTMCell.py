@@ -1,4 +1,5 @@
 from imports import tf
+from ResidualMultiHeadAttentionUnit import ResidualMultiHeadAttentionUnit
 
 class MultiHeadAttentionLSTMCell(tf.keras.models.Model):
 	
@@ -17,45 +18,31 @@ class MultiHeadAttentionLSTMCell(tf.keras.models.Model):
 		self.num_heads = num_heads
 		self.seq_len = sequence_length
 		self.output_size = output_size
-		self.state_size = self.output_size
-		self.input_shape = input_shape
+		self.state_size = [tf.TensorShape([self.output_size, 1]), tf.TensorShape([self.output_size, 1])]
+		self.input_shape_manual = input_shape
 		self.residual = residual
 		self.activation = activation
 		self.recurrent_activation = recurrent_activation
 
 		(self.input_attention_i, self.input_attention_f,
 		self.input_attention_o, self.input_attention_c) = [
-			self.residual_multi_head_attention(
-				recurrent = False,
+			ResidualMultiHeadAttentionUnit(
+				num_heads = self.num_heads,
+				output_size = self.output_size,
+				input_shape = self.input_shape_manual,
+				residual = self.residual,
 				name = f"{name}_InputAttention_{i}"
 			) for i in range(4)]
 		
 		(self.recurrent_attention_i, self.recurrent_attention_f,
 		self.recurrent_attention_o, self.recurrent_attention_c) = [
-			self.residual_multi_head_attention(
-				recurrent = True,
+			ResidualMultiHeadAttentionUnit(
+				num_heads = self.num_heads,
+				output_size = self.output_size,
+				input_shape = self.input_shape_manual,
+				residual = self.residual,
 				name = f"{name}_RecurrentAttention_{i}"
-				) for i in range(4)]
-
-	def residual_multi_head_attention(
-		self,
-		name: str,
-		recurrent: bool = False):
-
-		if recurrent:
-			inp = tf.keras.layers.Input(shape = (self.output_size,))
-		else:
-			inp = tf.keras.layers.Input(shape = self.input_shape)
-		res = tf.keras.layers.MultiHeadAttention(
-			num_heads = self.num_heads,
-			key_dim = self.output_size
-		)(inp, inp)
-
-		if self.residual:
-			res = tf.keras.layers.LayerNormalization(inp + res)
-		
-		out = tf.keras.layers.Dense(self.output_size, activation = "relu")(res)
-		return tf.keras.models.Model(inputs = inp, outputs = out, name = name)
+			) for i in range(4)]
 
 	def call(self, inputs, states):
 

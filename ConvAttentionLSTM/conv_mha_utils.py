@@ -7,19 +7,17 @@ input_shape: tuple,
 sequence_length: int,
 hidden_size: int,
 residual: bool,
-name: str = "GraphAttentionLSTMModel"):
+name: str = "ConvAttentionLSTMModel"):
+	_, height, width, channels = input_shape
 	input_layer = tf.keras.layers.Input(shape = input_shape)
 
 	layer_shape = tf.shape(input_layer)
 
-	if len(layer_shape) == 4:
-		c = 1
-		b, s, h, w = layer_shape
-	else:
-		b, s, h, w, c = layer_shape
+	b, s, h, w, c = layer_shape
 		
-	reshaped_input = tf.reshape(input_layer, (b, s, h * w * c))
-	flattened_input_shape = (h * w * c,)
+	reshaped_input = tf.reshape(input_layer, (b, s, h * w, c))
+
+	flattened_input_shape = (height * width, channels)
 
 	x = reshaped_input
 
