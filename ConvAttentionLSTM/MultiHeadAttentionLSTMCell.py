@@ -18,7 +18,7 @@ class MultiHeadAttentionLSTMCell(tf.keras.layers.Layer):
 		self.num_heads = num_heads
 		self.seq_len = sequence_length
 		self.output_size = output_size
-		self.state_size = [tf.TensorShape([self.output_size, 1]), tf.TensorShape([self.output_size, 1])]
+		self.state_size = [tf.TensorShape([self.seq_len, self.output_size]), tf.TensorShape([self.seq_len, self.output_size])]
 		self.input_shape_manual = input_shape
 		self.residual = residual
 		self.activation = activation
@@ -29,7 +29,7 @@ class MultiHeadAttentionLSTMCell(tf.keras.layers.Layer):
 			ResidualMultiHeadAttentionUnit(
 				num_heads = self.num_heads,
 				output_size = self.output_size,
-				input_shape = self.input_shape_manual,
+				sequence_length = self.seq_len,
 				residual = self.residual,
 				name = f"{name}_InputAttention_{i}"
 			) for i in range(4)]
@@ -39,7 +39,7 @@ class MultiHeadAttentionLSTMCell(tf.keras.layers.Layer):
 			ResidualMultiHeadAttentionUnit(
 				num_heads = self.num_heads,
 				output_size = self.output_size,
-				input_shape = self.input_shape_manual,
+				sequence_length = self.seq_len,
 				residual = self.residual,
 				name = f"{name}_RecurrentAttention_{i}"
 			) for i in range(4)]
