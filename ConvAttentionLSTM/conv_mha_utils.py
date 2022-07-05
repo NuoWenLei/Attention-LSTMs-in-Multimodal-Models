@@ -5,6 +5,7 @@ def create_conv_mha_lstm_model(layer_units: Iterable,
 num_heads: int,
 input_shape: tuple,
 sequence_length: int,
+output_size: int,
 hidden_size: int,
 residual: bool,
 name: str = "ConvAttentionLSTMModel"):
@@ -51,7 +52,11 @@ name: str = "ConvAttentionLSTMModel"):
 		return_sequences = False
 	)(x)
 
-	return tf.keras.models.Model(inputs = input_layer, outputs = mhaLSTM_2, name = name)
+	reshaped_output = tf.reshape(mhaLSTM_2, (-1, tf.shape(mhaLSTM_2)[1]))
+
+	out_dense = tf.keras.layers.Dense(output_size, activation = "sigmoid")(reshaped_output)
+
+	return tf.keras.models.Model(inputs = input_layer, outputs = out_dense, name = name)
 	
 def load_sequential_data(maps_path: str,
 metadata_path: str,
