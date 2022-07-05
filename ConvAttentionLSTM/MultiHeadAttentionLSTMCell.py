@@ -1,7 +1,7 @@
 from imports import tf
 from ResidualMultiHeadAttentionUnit import ResidualMultiHeadAttentionUnit
 
-class MultiHeadAttentionLSTMCell(tf.keras.models.Model):
+class MultiHeadAttentionLSTMCell(tf.keras.layers.Layer):
 	
 	def __init__(self,
 			units: int,

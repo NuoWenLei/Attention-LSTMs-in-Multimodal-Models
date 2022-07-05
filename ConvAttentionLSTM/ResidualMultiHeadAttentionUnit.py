@@ -23,12 +23,17 @@ class ResidualMultiHeadAttentionUnit(tf.keras.layers.Layer):
 
 		if self.residual:
 			self.layer_norm = tf.keras.layers.LayerNormalization()
+			self.conv_residual = tf.keras.layers.Conv1D(self.output_size, 1)
 	
 	def call(self, inputs):
-		x = self.mha(inputs)
+		x = self.mha(inputs, inputs)
 
 		if self.residual:
-			x = self.layer_norm(inputs + x)
+			if tf.shape(inputs)[-2] != tf.shape(x)[-2]:
+				input_features = self.conv_residual(tf.reshape(inputs, [*tf.shape(inputs)[:-2], -1]))
+				x = self.layer_norm(x + input_features)
+			else:
+				x = self.layer_norm(x + inputs)
 		
 		x = self.out_dense(x)
 		return x
