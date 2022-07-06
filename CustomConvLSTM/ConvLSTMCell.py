@@ -29,7 +29,7 @@ class ConvLSTMCell(tf.keras.layers.Layer):
 		
 		(self.recurrent_attention_i, self.recurrent_attention_f,
 		self.recurrent_attention_o, self.recurrent_attention_c) = [
-			tf.keras.layers.Conv2D(
+			tf.keras.layers.Conv1D(
 				filters = self.filters,
 				kernel_size = self.kernel_size,
 				name = f"{name}_recurrent_attention_{i}"
