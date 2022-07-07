@@ -17,7 +17,7 @@ class GraphAttentionHead(tf.keras.layers.Layer):
     self.leaky_relu = tf.keras.layers.LeakyReLU()
     self.bias_value = tf.Variable(self.bias_initializer(shape = (self.seq_len, 1)))
 
-    if self.seq_len != self.output_size:
+    if self.residual:
       self.conv_residual = tf.keras.layers.Conv1D(self.output_size, 1)
 
   def call(self, inputs):
@@ -41,10 +41,7 @@ class GraphAttentionHead(tf.keras.layers.Layer):
     attention_applied_sequence_features_w_bias = attention_applied_sequence_features + self.bias_value # output shape: (seq_len, output_size)
 
     if self.residual:
-      if self.seq_len != self.output_size:
-        attention_applied_sequence_features_w_bias = attention_applied_sequence_features_w_bias + self.conv_residual(sequence)
-      else:
-        attention_applied_sequence_features_w_bias = attention_applied_sequence_features_w_bias + sequence
+      attention_applied_sequence_features_w_bias = attention_applied_sequence_features_w_bias + self.conv_residual(sequence)
     
     if self.activation:
       return self.activation(attention_applied_sequence_features_w_bias)
