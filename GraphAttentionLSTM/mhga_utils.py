@@ -10,6 +10,7 @@ hidden_size: int,
 residual: bool,
 use_bias: bool,
 concat_output: bool = False,
+seq_wise_output: bool = True,
 name: str = "GraphAttentionLSTMModel"):
 
 	input_nodes = tf.keras.layers.Input(shape = input_shape_nodes)
@@ -33,11 +34,13 @@ name: str = "GraphAttentionLSTMModel"):
 			return_sequences = True
 		)((x, input_adj_mats))
 
+	
+
 	mhgaLSTM_out_cell = MultiHeadGraphAttentionLSTMCell(
 		units = layer_units[-1],
 		num_heads = num_heads,
 		sequence_length = sequence_length,
-		output_size = 1,
+		output_size = 1 if seq_wise_output else sequence_length,
 		residual = True,
 		concat_output = False,
 		use_bias = True,
@@ -46,7 +49,12 @@ name: str = "GraphAttentionLSTMModel"):
 
 	mhgaLSTM_2 = tf.keras.layers.RNN(mhgaLSTM_out_cell)((x, input_adj_mats))
 
-	return tf.keras.models.Model(inputs = [input_nodes, input_adj_mats], outputs = mhgaLSTM_2, name = name)
+	if seq_wise_output:
+		output = mhgaLSTM_2
+	else:
+		output = tf.reduce_sum(mhgaLSTM_2, axis = -2)
+
+	return tf.keras.models.Model(inputs = [input_nodes, input_adj_mats], outputs = output, name = name)
 
 def load_data(covid_data_path, flight_data_path):
 	flight_df = pd.read_csv(flight_data_path)
