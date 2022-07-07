@@ -4,6 +4,7 @@ from ConvMultiHeadAttentionUnit import ConvMultiHeadAttentionUnit
 class ConvMhaLSTMCell(tf.keras.layers.Layer):
 
 	def __init__(self,
+	units: int,
 	num_heads: int,
 	d_model: int,
 	output_size: int,
@@ -17,6 +18,7 @@ class ConvMhaLSTMCell(tf.keras.layers.Layer):
 	query_block_length = None
 	):
 		super().__init__(name = name)
+		self.units = units
 		self.num_heads = num_heads
 		self.d_model = d_model
 		self.output_size = output_size

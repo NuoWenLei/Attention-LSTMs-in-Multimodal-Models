@@ -1,62 +1,67 @@
 from imports import tf, Iterable, np, json, pd, date
-from MultiHeadAttentionLSTMCell import MultiHeadAttentionLSTMCell
+from ConvMhaLSTMCell import ConvMhaLSTMCell
 
 def create_conv_mha_lstm_model(layer_units: Iterable,
 num_heads: int,
-input_shape: tuple,
-sequence_length: int,
+d_model: int,
+layer_output_size: int,
 output_size: int,
-hidden_size: int,
-residual: bool,
+image_dims: tuple,
+sequence_length: int,
+activation = tf.keras.activations.tanh,
+recurrent_activation = tf.keras.activations.hard_sigmoid,
+attention_type: str = "local_1d",
+mha_feature_activation: str = "relu",
+mha_output_activation: str = "linear",
+query_block_length = None,
 name: str = "ConvAttentionLSTMModel"):
-	_, height, width, channels = input_shape
-	input_layer = tf.keras.layers.Input(shape = input_shape)
+	input_layer = tf.keras.layers.Input(shape = (sequence_length,) + image_dims)
 
-	layer_shape = tf.shape(input_layer)
-
-	b, s, h, w, c = layer_shape
-		
-	reshaped_input = tf.reshape(input_layer, (b, s, h * w, c))
-
-	flattened_input_shape = (height * width, channels)
-
-	x = reshaped_input
+	x = input_layer
 
 	for i in range(len(layer_units) - 1):
-		mhaLSTM_cell = MultiHeadAttentionLSTMCell(
+		mhaLSTM_cell = ConvMhaLSTMCell(
 			units = layer_units[i],
 			num_heads = num_heads,
-			sequence_length = sequence_length,
-			output_size = hidden_size,
-			input_shape = flattened_input_shape,
-			residual = residual,
-			name = f"{name}_mhaLSTMCell_{i}"
+			d_model = d_model,
+			output_size = layer_output_size,
+			image_dims = image_dims,
+			name = f"{name}_mhaLSTMCell_{i}",
+			attention_type = attention_type,
+			activation = activation,
+			recurrent_activation = recurrent_activation,
+			mha_feature_activation = mha_feature_activation,
+			mha_output_activation = mha_output_activation,
+			query_block_length = query_block_length
 		)
 		x = tf.keras.layers.RNN(
 			mhaLSTM_cell,
 			return_sequences = True
 		)(x)
 	
-	mhaLSTM_out_cell = MultiHeadAttentionLSTMCell(
-		units = layer_units[-1],
-		num_heads = num_heads,
-		sequence_length = sequence_length,
-		output_size = 1,
-		input_shape = flattened_input_shape,
-		residual = residual,
-		name = f"{name}_mhaLSTMCell_out"
-	)
+	mhaLSTM_out_cell = ConvMhaLSTMCell(
+			units = layer_units[-1],
+			num_heads = num_heads,
+			d_model = d_model,
+			output_size = output_size,
+			image_dims = image_dims,
+			name = f"{name}_mhaLSTMCell_out",
+			attention_type = attention_type,
+			activation = activation,
+			recurrent_activation = recurrent_activation,
+			mha_feature_activation = mha_feature_activation,
+			mha_output_activation = mha_output_activation,
+			query_block_length = query_block_length
+		)
 
 	mhaLSTM_2 = tf.keras.layers.RNN(
 		mhaLSTM_out_cell,
 		return_sequences = False
 	)(x)
 
-	reshaped_output = tf.reshape(mhaLSTM_2, (-1, tf.shape(mhaLSTM_2)[1]))
+	output = tf.reduce_sum(mhaLSTM_2, axis = -2)
 
-	out_dense = tf.keras.layers.Dense(output_size, activation = "sigmoid")(reshaped_output)
-
-	return tf.keras.models.Model(inputs = input_layer, outputs = out_dense, name = name)
+	return tf.keras.models.Model(inputs = input_layer, outputs = output, name = name)
 	
 def load_sequential_data(maps_path: str,
 metadata_path: str,
