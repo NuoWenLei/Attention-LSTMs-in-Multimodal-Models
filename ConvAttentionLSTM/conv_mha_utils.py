@@ -19,6 +19,10 @@ name: str = "ConvAttentionLSTMModel"):
 
 	x = input_layer
 
+	input_shape = tf.shape(x)
+
+	x = tf.reshape(x, (input_shape[0], sequence_length, -1, 1))
+
 	for i in range(len(layer_units) - 1):
 		mhaLSTM_cell = ConvMhaLSTMCell(
 			units = layer_units[i],

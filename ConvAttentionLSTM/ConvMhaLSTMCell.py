@@ -52,7 +52,7 @@ class ConvMhaLSTMCell(tf.keras.layers.Layer):
 				num_heads = self.num_heads,
 				d_model = self.d_model,
 				output_size = self.output_size,
-				name = f"{name}_InputAttention_{i}",
+				name = f"{name}_RecurrentAttention_{i}",
 				feature_activation = self.mha_feature_activation,
 				output_activation = self.mha_output_activation,
 				attention_type = self.attention_type,
@@ -71,10 +71,10 @@ class ConvMhaLSTMCell(tf.keras.layers.Layer):
 		x_o = self.input_attention_o(inputs)
 
 		# Processing hidden state
-		h_i = self.recurrent_attention_i(prev_h, recurrent = True)
-		h_f = self.recurrent_attention_f(prev_h, recurrent = True)
-		h_c = self.recurrent_attention_c(prev_h, recurrent = True)
-		h_o = self.recurrent_attention_o(prev_h, recurrent = True)
+		h_i = self.recurrent_attention_i(prev_h)
+		h_f = self.recurrent_attention_f(prev_h)
+		h_c = self.recurrent_attention_c(prev_h)
+		h_o = self.recurrent_attention_o(prev_h)
 
 		# LSTM calculations
 		i = tf.cast(self.recurrent_activation(x_i + h_i), tf.float32)

@@ -40,14 +40,12 @@ class ConvMultiHeadAttentionUnit(tf.keras.layers.Layer):
 		softmax_attention_score = tf.math.softmax(attention)
 		return tf.matmul(softmax_attention_score, v)
 
-	def call(self, X, recurrent = False):
+	def call(self, X):
 		# Input Shape: [batch_size, height, width, channels]
 
-		if not recurrent:
+		X_shape = tf.shape(X)
 
-			b, h, w, c = tf.shape(X)
-
-			X = tf.reshape(X, (b, -1, 1))
+		b, l, c = X_shape[0], X_shape[1], X_shape[2]
 
 		q_features = self.q_dense(X) # output: (batch_size, height * width * channels, d_model)
 		k_features = self.k_dense(X) # output: (batch_size, height * width * channels, d_model)
@@ -69,13 +67,31 @@ class ConvMultiHeadAttentionUnit(tf.keras.layers.Layer):
 
 		elif self.attention_type == "local_1d":
 
-			padding = tf.zeros((tf.rank(q_heads), 2))
+			if l % self.query_block_length != 0:
 
-			padding[-2, 1] = self.query_block_length - ((h*w) % self.query_block_length)
+				padding = [
+					[0, 0],
+					[0, 0],
+					[0, self.query_block_length - ((l) % self.query_block_length)],
+					[0, 0]
+				]
 
-			padded_q_heads = tf.pad(q_heads, padding) # output: (batch_size, num_heads, (h*w*c) padded, query_size)
-			padded_k_heads = tf.pad(k_heads, padding) # output: (batch_size, num_heads, (h*w*c) padded, query_size)
-			padded_v_heads = tf.pad(v_heads, padding) # output: (batch_size, num_heads, (h*w*c) padded, query_size)
+				padded_q_heads = tf.pad(q_heads, padding) # output: (batch_size, num_heads, (h*w*c) padded, query_size)
+				padded_k_heads = tf.pad(k_heads, padding) # output: (batch_size, num_heads, (h*w*c) padded, query_size)
+				padded_v_heads = tf.pad(v_heads, padding) # output: (batch_size, num_heads, (h*w*c) padded, query_size)
+			
+			else:
+
+				padded_q_heads = q_heads
+				padded_k_heads = k_heads
+				padded_v_heads = v_heads
+
+
+			# padding = np.zeros((len(np.shape(q_heads)), 2))
+
+			# print(np.int32(self.query_block_length - ((h*w) % self.query_block_length)))
+
+			# padding[-2, 1] = np.int32(self.query_block_length - ((h*w) % self.query_block_length))
 
 			padded_q_heads = tf.reshape(padded_q_heads,
 			(b,
@@ -106,7 +122,7 @@ class ConvMultiHeadAttentionUnit(tf.keras.layers.Layer):
 
 			self_attentioned_value_padded = tf.reshape(self_attentioned_value_unshaped_padded, (b, self.num_heads, -1, self.query_size))
 
-			self_attentioned_value = self_attentioned_value_padded[:, :, :(h*w), :]
+			self_attentioned_value = self_attentioned_value_padded[:, :, :(l), :]
 
 		concatted_head_value = tf.reshape(self_attentioned_value, (b, -1, self.d_model))
 
