@@ -52,7 +52,7 @@ name: str = "GraphAttentionLSTMModel"):
 	if seq_wise_output:
 		output = mhgaLSTM_2
 	else:
-		output = tf.reduce_sum(mhgaLSTM_2, axis = -2)
+		output = tf.reduce_mean(mhgaLSTM_2, axis = -2)
 
 	return tf.keras.models.Model(inputs = [input_nodes, input_adj_mats], outputs = output, name = name)
 

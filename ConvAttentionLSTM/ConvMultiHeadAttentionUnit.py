@@ -10,7 +10,8 @@ class ConvMultiHeadAttentionUnit(tf.keras.layers.Layer):
 	feature_activation: str = "relu",
 	output_activation: str = "linear",
 	attention_type: str = "local_1d",
-	query_block_length = None):
+	query_block_length = None,
+	query_kernel_size = None):
 
 		super().__init__(name = name)
 
@@ -30,6 +31,10 @@ class ConvMultiHeadAttentionUnit(tf.keras.layers.Layer):
 		if self.attention_type == "local_1d":
 			self.query_block_length = query_block_length
 			assert self.query_block_length is not None, "Did not provide query block length"
+
+		if self.attention_type == "local_2d":
+			self.query_kernel_size = query_kernel_size
+
 
 		assert self.d_model % self.num_heads == 0, "D_model and Number of Heads do not match"
 
@@ -97,22 +102,22 @@ class ConvMultiHeadAttentionUnit(tf.keras.layers.Layer):
 			(b,
 			self.num_heads, 
 			-1,
-			self.query_block_length,
-			self.query_size)) # output: (batch_size, num_heads, num_blocks, query_block_length, query_size)
+			self.query_size,
+			self.query_block_length)) # output: (batch_size, num_heads, num_blocks, query_size, query_block_length)
 
 			padded_k_heads = tf.reshape(padded_k_heads,
 			(b,
 			self.num_heads, 
 			-1,
-			self.query_block_length,
-			self.query_size)) # output: (batch_size, num_heads, num_blocks, query_block_length, query_size)
+			self.query_size,
+			self.query_block_length)) # output: (batch_size, num_heads, num_blocks, query_size, query_block_length)
 
 			padded_v_heads = tf.reshape(padded_v_heads,
 			(b,
 			self.num_heads, 
 			-1,
-			self.query_block_length,
-			self.query_size)) # output: (batch_size, num_heads, num_blocks, query_block_length, query_size)
+			self.query_size,
+			self.query_block_length)) # output: (batch_size, num_heads, num_blocks, query_size, query_block_length)
 
 			attention = tf.einsum("...ik,...jk->...ij", padded_q_heads, padded_k_heads)
 
@@ -123,6 +128,11 @@ class ConvMultiHeadAttentionUnit(tf.keras.layers.Layer):
 			self_attentioned_value_padded = tf.reshape(self_attentioned_value_unshaped_padded, (b, self.num_heads, -1, self.query_size))
 
 			self_attentioned_value = self_attentioned_value_padded[:, :, :(l), :]
+
+		elif self.attention_type == "local_2d":
+			# TODO: implement local 2d
+			pass
+			
 
 		concatted_head_value = tf.reshape(self_attentioned_value, (b, -1, self.d_model))
 

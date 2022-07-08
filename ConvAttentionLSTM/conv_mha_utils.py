@@ -63,7 +63,7 @@ name: str = "ConvAttentionLSTMModel"):
 		return_sequences = False
 	)(x)
 
-	output = tf.reduce_sum(mhaLSTM_2, axis = -2)
+	output = tf.reduce_mean(mhaLSTM_2, axis = -2)
 
 	return tf.keras.models.Model(inputs = input_layer, outputs = output, name = name)
 	
