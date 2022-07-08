@@ -6,18 +6,21 @@ num_heads: int,
 d_model: int,
 output_size: int,
 image_dims: tuple,
-blocks_y: int,
-blocks_x: int,
+kernel_size: tuple,
 sequence_length: int,
 activation = tf.keras.activations.tanh,
 recurrent_activation = tf.keras.activations.hard_sigmoid,
 mha_feature_activation: str = "relu",
 mha_output_activation: str = "linear",
+use_maxpool: bool = True,
+use_out_dense: bool = True,
 name: str = "Conv2DAttentionLSTMModel"):
 
-	kernel_size = calc_kernel_size(image_dims, blocks_y, blocks_x)
+	# kernel_size = calc_kernel_size(image_dims, blocks_y, blocks_x)
 
 	input_layer = tf.keras.layers.Input(shape = (sequence_length,) + image_dims)
+
+	curr_image_dims = list(image_dims)
 
 	x = input_layer
 
@@ -30,7 +33,7 @@ name: str = "Conv2DAttentionLSTMModel"):
 			units = layer_units[i],
 			num_heads = num_heads,
 			d_model = d_model,
-			image_dims = image_dims,
+			image_dims = curr_image_dims,
 			kernel_size = kernel_size,
 			name = f"{name}_mhaLSTMCell_{i}",
 			activation = activation,
@@ -42,12 +45,17 @@ name: str = "Conv2DAttentionLSTMModel"):
 			mhaLSTM_cell,
 			return_sequences = True
 		)(x)
+
+		if use_maxpool:
+			x = tf.keras.layers.MaxPool2D()(x)
+			curr_image_dims[0] = curr_image_dims[0] // 2
+			curr_image_dims[1] = curr_image_dims[1] // 2
 	
 	mhaLSTM_out_cell = Conv2DmhaLSTMCell(
 			units = layer_units[-1],
 			num_heads = num_heads,
-			d_model = output_size,
-			image_dims = image_dims,
+			d_model = output_size if not use_out_dense else d_model,
+			image_dims = curr_image_dims,
 			kernel_size = kernel_size,
 			name = f"{name}_mhaLSTMCell_out",
 			activation = activation,
@@ -61,7 +69,12 @@ name: str = "Conv2DAttentionLSTMModel"):
 		return_sequences = False
 	)(x)
 
-	return tf.keras.models.Model(inputs = input_layer, outputs = mhaLSTM_2, name = name)
+	if use_out_dense:
+		output = tf.keras.layers.Dense(output_size, activation = "linear")(mhaLSTM_2)
+	else:
+		output = mhaLSTM_2
+
+	return tf.keras.models.Model(inputs = input_layer, outputs = output, name = name)
 
 def calc_kernel_size(image_dims, blocks_y, blocks_x):
 	y_complete = (image_dims[0] % blocks_y == 0)
