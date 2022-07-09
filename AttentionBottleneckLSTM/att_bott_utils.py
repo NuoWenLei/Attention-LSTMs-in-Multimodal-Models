@@ -1,4 +1,4 @@
-from imports import tf, Iterable, np, json, pd, date
+from imports import tf, Iterable, np, json, pd, date, nx, tqdm
 from Conv2DAttentionLSTM import Conv2DmhaLSTMCell
 from MultiHeadGraphAttentionLSTMCell import MultiHeadGraphAttentionLSTMCell
 from MultiHeadAttentionLSTMCell import MultiHeadAttentionLSTMCell
@@ -185,7 +185,7 @@ def calc_kernel_size(image_dims, blocks_y, blocks_x):
 
 	return kernel_size
 	
-def load_sequential_data(maps_path: str,
+def load_sequential_data_image(maps_path: str,
 metadata_path: str,
 dataset_path: str,
 image_x: int = 128,
@@ -206,8 +206,10 @@ num_days_per_sample: int = 7):
 
 	image_idx_dictionary = dict([(d, i) for i, d in enumerate(dates)])
 
+	print("Loading Image Indices...")
+
 	image_indices = []
-	for i, row in df.iterrows():
+	for i, row in tqdm(df.iterrows()):
 		image_indices.append(image_idx_dictionary[row["date"]])
 
 	df["image_index"] = image_indices
@@ -238,6 +240,79 @@ num_days_per_sample: int = 7):
 	formatted_y = np.array(formatted_y_list)
 
 	return formatted_X, formatted_y, raw_X
+
+def load_graph_data(covid_data_path, flight_data_path):
+	flight_df = pd.read_csv(flight_data_path)
+	covid_df = pd.read_csv(covid_data_path)
+	covid_df["adjusted_date"] = [date(int("20" + y), int(m), int(d)).strftime("%Y/%m/%d") for m, d, y in covid_df["date"].str.split("/")]
+	adj_dates = set(flight_df.columns[2:])
+	covid_dates = set(covid_df["adjusted_date"].values)
+	adj_dates_lacked = covid_dates.difference(adj_dates)
+	covid_df = covid_df[~covid_df["adjusted_date"].isin(list(adj_dates_lacked))]
+
+	adj_matrices = []
+	for d in flight_df.columns[2:]:
+		G = nx.from_pandas_edgelist(df = flight_df, source = "state_from", target = "state_to", edge_attr = d)
+		A = nx.adjacency_matrix(G, weight = d)
+		adj_matrices.append(A.todense())
+	ADJ_MATRICES = np.array(adj_matrices)
+
+	return ADJ_MATRICES, covid_df
+
+def load_sequential_data_graph(covid_data_path, flight_data_path, num_days_per_sample = 7):
+	ADJ_MATRICES, covid_df = load_graph_data(covid_data_path, flight_data_path)
+	sorted_unique_dates = np.sort(covid_df["adjusted_date"].unique())
+
+	print("Generating Sequential Data...")
+	formatted_X_list = []
+	formatted_adj_mat_list = []
+	formatted_y_list_infection = []
+	formatted_y_list_death = []
+	valid_cols = ["Population", "confirm_value", "death_value", "infection_rate", "death_rate_from_population"]
+
+	print("Loading Sequential Graph Data...")
+
+	for i in tqdm(range(sorted_unique_dates.shape[0] - num_days_per_sample)):
+		formatted_X_list.append([covid_df[covid_df["adjusted_date"] == d][valid_cols].values for d in sorted_unique_dates[i:i + num_days_per_sample]])
+
+		formatted_adj_mat_list.append(ADJ_MATRICES[i:i + num_days_per_sample])
+
+		formatted_y_list_infection.append(covid_df[covid_df["adjusted_date"] == sorted_unique_dates[i + num_days_per_sample]]["infection_rate"])
+
+		formatted_y_list_death.append(covid_df[covid_df["adjusted_date"] == sorted_unique_dates[i + num_days_per_sample]]["death_rate_from_population"])
+
+	formatted_X = np.array(formatted_X_list)
+	formatted_adj_mat = np.array(formatted_adj_mat_list)
+	formatted_y_infection = np.array(formatted_y_list_infection)
+	formatted_y_death = np.array(formatted_y_list_death)
+
+	return (formatted_X, formatted_adj_mat, formatted_y_infection, formatted_y_death)
+
+def load_sequential_data(
+	maps_path: str,
+	metadata_path: str,
+	covid_data_path: str,
+	flight_data_path,
+	image_x: int = 128,
+	image_y: int = 128,
+	num_days_per_sample = 7):
+
+	image_data = load_sequential_data_image(
+		maps_path,
+		metadata_path,
+		covid_data_path,
+		image_x,
+		image_y,
+		num_days_per_sample)
+	
+	graph_data = load_sequential_data_graph(
+		covid_data_path,
+		flight_data_path,
+		num_days_per_sample
+	)
+
+	return image_data, graph_data
+
 
 def create_flow(X_indices, y, batch_size, raw_X):
 	index = 0
