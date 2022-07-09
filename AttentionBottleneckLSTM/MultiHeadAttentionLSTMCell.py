@@ -1,46 +1,37 @@
 from imports import tf
-from ResidualMultiHeadAttentionUnit import ResidualMultiHeadAttentionUnit
 
 class MultiHeadAttentionLSTMCell(tf.keras.layers.Layer):
 	
 	def __init__(self,
 			units: int,
 			num_heads: int,
-			sequence_length: int,
-			output_size: int,
-			input_shape: tuple,
-			residual: bool,
+			d_model: int,
+			num_tokens: int,
 			name: str,
 			activation = tf.keras.activations.tanh,
 			recurrent_activation = tf.keras.activations.hard_sigmoid):
 		super().__init__(name = name)
 		self.units = units
 		self.num_heads = num_heads
-		self.seq_len = sequence_length
-		self.output_size = output_size
-		self.state_size = [tf.TensorShape([self.seq_len, self.output_size]), tf.TensorShape([self.seq_len, self.output_size])]
-		self.input_shape_manual = input_shape
-		self.residual = residual
+		self.d_model = d_model
+		self.num_tokens = num_tokens
+		self.state_size = [tf.TensorShape([self.num_tokens, self.d_model]), tf.TensorShape([self.num_tokens, self.d_model])]
 		self.activation = activation
 		self.recurrent_activation = recurrent_activation
 
 		(self.input_attention_i, self.input_attention_f,
 		self.input_attention_o, self.input_attention_c) = [
-			ResidualMultiHeadAttentionUnit(
+			tf.keras.layers.MultiHeadAttention(
 				num_heads = self.num_heads,
-				output_size = self.output_size,
-				sequence_length = self.seq_len,
-				residual = self.residual,
+				key_dim = self.d_model,
 				name = f"{name}_InputAttention_{i}"
 			) for i in range(4)]
 		
 		(self.recurrent_attention_i, self.recurrent_attention_f,
 		self.recurrent_attention_o, self.recurrent_attention_c) = [
-			ResidualMultiHeadAttentionUnit(
+			tf.keras.layers.MultiHeadAttention(
 				num_heads = self.num_heads,
-				output_size = self.output_size,
-				sequence_length = self.seq_len,
-				residual = self.residual,
+				key_dim = self.d_model,
 				name = f"{name}_RecurrentAttention_{i}"
 			) for i in range(4)]
 
