@@ -43,6 +43,7 @@ def create_att_bottleneck_model(
 	input_adj_mats = tf.keras.layers.Input(shape = input_shape_edges)
 
 	curr_image_dims = list(image_dims)
+	curr_image_size = curr_image_dims[0] * curr_image_dims[1]
 	b = tf.shape(x_image)[0]
 
 	x_image = input_layer_image
@@ -74,6 +75,7 @@ def create_att_bottleneck_model(
 				x_image = tf.keras.layers.MaxPool3D((1,2,2))(x_image)
 				curr_image_dims[0] = curr_image_dims[0] // 2
 				curr_image_dims[1] = curr_image_dims[1] // 2
+				curr_image_size = curr_image_dims[0] * curr_image_dims[1]
 
 			# Graph
 			mhgaLSTM_cell_graph = MultiHeadGraphAttentionLSTMCell(
@@ -103,7 +105,7 @@ def create_att_bottleneck_model(
 				units = layer_units[i],
 				num_heads = num_heads,
 				d_model = d_model,
-				num_tokens = (curr_image_dims[0] * curr_image_dims[1]) + num_pad_tokens + sequence_length_graph,
+				num_tokens = curr_image_size + num_pad_tokens + sequence_length_graph,
 				name = f"{name}_mhacell_{i}",
 				activation = activation,
 				recurrent_activation = recurrent_activation
@@ -118,9 +120,9 @@ def create_att_bottleneck_model(
 			if refresh_pad_tokens:
 				self_attention_tokens = tf.concat(
 					[
-						self_attention_tokens[:, :, :d_model, :],
+						self_attention_tokens[:, :, :curr_image_size, :],
 						tf.zeros((b, sequence_length, num_pad_tokens, d_model)),
-						self_attention_tokens[:, :, d_model + num_pad_tokens:, :]],
+						self_attention_tokens[:, :, curr_image_size + num_pad_tokens:, :]],
 						axis = 2)
 
 		# normal pass through with MultiHeadAttentionLSTMCell
@@ -130,7 +132,7 @@ def create_att_bottleneck_model(
 				units = layer_units[i],
 				num_heads = num_heads,
 				d_model = d_model,
-				num_tokens = (curr_image_dims[0] * curr_image_dims[1]) + num_pad_tokens + sequence_length_graph,
+				num_tokens = curr_image_size + num_pad_tokens + sequence_length_graph,
 				name = f"{name}_mhacell_{i}",
 				activation = activation,
 				recurrent_activation = recurrent_activation
@@ -144,16 +146,16 @@ def create_att_bottleneck_model(
 			if refresh_pad_tokens:
 				self_attention_tokens = tf.concat(
 					[
-						self_attention_tokens[:, :, :d_model, :],
+						self_attention_tokens[:, :, :curr_image_size, :],
 						tf.zeros((b, sequence_length, num_pad_tokens, d_model)),
-						self_attention_tokens[:, :, d_model + num_pad_tokens:, :]],
+						self_attention_tokens[:, :, curr_image_size + num_pad_tokens:, :]],
 						axis = 2)
 
 	mha_LSTMCell_out = MultiHeadAttentionLSTMCell(
 		units = layer_units[-1],
 		num_heads = num_heads,
-		d_model = 1,
-		num_tokens = (curr_image_dims[0] * curr_image_dims[1]) + num_pad_tokens + sequence_length_graph,
+		d_model = d_model,
+		num_tokens = curr_image_size + num_pad_tokens + sequence_length_graph,
 		name = f"{name}_mhacell_out",
 		activation = activation,
 		recurrent_activation = recurrent_activation
@@ -164,7 +166,19 @@ def create_att_bottleneck_model(
 		return_sequences = False
 	)(self_attention_tokens)
 
-	output = tf.keras.layers.Dense(output_size, activation = "linear")(mhaLSTM_2)
+	image_tokens = mhaLSTM_2[:, :curr_image_size, :]
+
+	graph_tokens = mhaLSTM_2[:, curr_image_size + num_pad_tokens:, :]
+
+	image_tokens_sum = tf.reduce_sum(image_tokens, axis = 1)
+
+	graph_tokens_sum = tf.reduce_sum(graph_tokens, axis = 1)
+
+	image_dense = tf.keras.layers.Dense(output_size, activation = "linear")(image_tokens_sum)
+
+	graph_dense = tf.keras.layers.Dense(output_size, activation = "linear")(graph_tokens_sum)
+
+	output = (image_dense + graph_dense) / tf.constant(2.)
 
 	return tf.keras.models.Model(inputs = [input_layer_image, input_nodes, input_adj_mats], outputs = output, name = name)
 
@@ -288,7 +302,7 @@ def load_sequential_data(
 	maps_path: str,
 	metadata_path: str,
 	covid_data_path: str,
-	flight_data_path,
+	flight_data_path: str,
 	image_x: int = 128,
 	image_y: int = 128,
 	num_days_per_sample = 7):
@@ -310,22 +324,43 @@ def load_sequential_data(
 	return image_data, graph_data
 
 
-def create_flow(X_indices, y, batch_size, raw_X):
+def create_flow(
+	# global
+	batch_size,
+	# images
+	X_indices,
+	raw_X,
+	# maps
+	X_nodes,
+	X_edges,
+	# target
+	y):
 	index = 0
 	while True:
-		X_sample = []
+		X_image_sample = []
+		X_node_sample = []
+		X_edge_sample = []
 		y_sample = []
 		for _ in range(batch_size):
-			X_sample.append(raw_X[X_indices[index, ...]])
+			X_image_sample.append(raw_X[X_indices[index, ...]])
+			X_node_sample.append(X_nodes[index, ...])
+			X_edge_sample.append(X_edges[index, ...])
 			y_sample.append(y[index, ...])
 			index += 1
 			if index >= X_indices.shape[0]:
 				index = 0
 				p = np.random.permutation(y.shape[0])
 				X_indices = X_indices[p]
+				X_nodes = X_nodes[p]
+				X_edges = X_edges[p]
 				y = y[p]
 
-		yield np.float32(X_sample), np.float32(y_sample)
+		yield ((
+			np.float32(X_image_sample),
+			np.float32(X_node_sample),
+			np.float32(X_edge_sample)
+			),
+			np.float32(y_sample))
 
 
 
