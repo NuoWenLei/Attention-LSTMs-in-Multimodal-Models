@@ -48,10 +48,6 @@ def create_att_bottleneck_model(
 	x_image = input_layer_image
 	x_graph = input_nodes
 
-	input_shape = tf.shape(x_image)
-
-	x_image = tf.reshape(x_image, (input_shape[0], sequence_length, -1, 1))
-
 	for i in range(len(layer_units) - 1):
 
 		if i < join_layer:
@@ -75,7 +71,7 @@ def create_att_bottleneck_model(
 			)(x_image)
 
 			if use_maxpool:
-				x_image = tf.keras.layers.MaxPool2D()(x_image)
+				x_image = tf.keras.layers.MaxPool3D((1,2,2))(x_image)
 				curr_image_dims[0] = curr_image_dims[0] // 2
 				curr_image_dims[1] = curr_image_dims[1] // 2
 

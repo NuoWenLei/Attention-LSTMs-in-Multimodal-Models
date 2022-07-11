@@ -24,10 +24,6 @@ name: str = "Conv2DAttentionLSTMModel"):
 
 	x = input_layer
 
-	input_shape = tf.shape(x)
-
-	x = tf.reshape(x, (input_shape[0], sequence_length, -1, 1))
-
 	for i in range(len(layer_units) - 1):
 		mhaLSTM_cell = Conv2DmhaLSTMCell(
 			units = layer_units[i],
@@ -47,7 +43,7 @@ name: str = "Conv2DAttentionLSTMModel"):
 		)(x)
 
 		if use_maxpool:
-			x = tf.keras.layers.MaxPool2D()(x)
+			x = tf.keras.layers.MaxPool3D((1,2,2))(x)
 			curr_image_dims[0] = curr_image_dims[0] // 2
 			curr_image_dims[1] = curr_image_dims[1] // 2
 	

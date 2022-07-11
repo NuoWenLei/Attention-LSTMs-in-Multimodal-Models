@@ -12,8 +12,6 @@ class Conv2DMHAUnit(tf.keras.layers.Layer):
 	output_activation: str = "linear"):
 		super().__init__(name = name)
 
-		assert self.d_model % self.num_heads == 0, "D_model and Number of Heads do not match"
-
 		self.num_heads = num_heads
 		self.d_model = d_model
 		self.query_size = self.d_model // self.num_heads
@@ -21,6 +19,8 @@ class Conv2DMHAUnit(tf.keras.layers.Layer):
 		self.output_activation = output_activation
 		self.image_size = image_size
 		self.kernel_size = kernel_size
+
+		assert self.d_model % self.num_heads == 0, "D_model and Number of Heads do not match"
 
 		self.num_blocks_y = self.image_size[0] // self.kernel_size[0]
 
@@ -59,7 +59,10 @@ class Conv2DMHAUnit(tf.keras.layers.Layer):
 
 	def call(self, X):
 
-		b, h, w, c = tf.shape(X)
+		X_shape = tf.shape(X)
+
+		b, h, w, c = X_shape[0], X_shape[1], X_shape[2], X_shape[3]
+		
 
 		X_reshaped = tf.reshape(X, (b, h * w, c))
 
