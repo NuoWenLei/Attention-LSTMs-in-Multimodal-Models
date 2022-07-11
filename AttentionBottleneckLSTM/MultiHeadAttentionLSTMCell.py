@@ -41,16 +41,16 @@ class MultiHeadAttentionLSTMCell(tf.keras.layers.Layer):
 		prev_c = states[1]
 
 		# Processing inputs
-		x_i = self.input_attention_i(inputs)
-		x_f = self.input_attention_f(inputs)
-		x_c = self.input_attention_c(inputs)
-		x_o = self.input_attention_o(inputs)
+		x_i = self.input_attention_i(inputs, inputs)
+		x_f = self.input_attention_f(inputs, inputs)
+		x_c = self.input_attention_c(inputs, inputs)
+		x_o = self.input_attention_o(inputs, inputs)
 
 		# Processing hidden state
-		h_i = self.recurrent_attention_i(prev_h)
-		h_f = self.recurrent_attention_f(prev_h)
-		h_c = self.recurrent_attention_c(prev_h)
-		h_o = self.recurrent_attention_o(prev_h)
+		h_i = self.recurrent_attention_i(prev_h, prev_h)
+		h_f = self.recurrent_attention_f(prev_h, prev_h)
+		h_c = self.recurrent_attention_c(prev_h, prev_h)
+		h_o = self.recurrent_attention_o(prev_h, prev_h)
 
 		# LSTM calculations
 		i = tf.cast(self.recurrent_activation(x_i + h_i), tf.float32)

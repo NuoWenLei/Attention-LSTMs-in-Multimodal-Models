@@ -1,5 +1,5 @@
 from imports import tf, Iterable, np, json, pd, date, nx, tqdm
-from Conv2DAttentionLSTM import Conv2DmhaLSTMCell
+from Conv2DmhaLSTMCell import Conv2DmhaLSTMCell
 from MultiHeadGraphAttentionLSTMCell import MultiHeadGraphAttentionLSTMCell
 from MultiHeadAttentionLSTMCell import MultiHeadAttentionLSTMCell
 
@@ -44,7 +44,7 @@ def create_att_bottleneck_model(
 
 	curr_image_dims = list(image_dims)
 	curr_image_size = curr_image_dims[0] * curr_image_dims[1]
-	b = tf.shape(x_image)[0]
+	b = tf.shape(input_layer_image)[0]
 
 	x_image = input_layer_image
 	x_graph = input_nodes
@@ -114,7 +114,7 @@ def create_att_bottleneck_model(
 			self_attention_tokens = tf.keras.layers.RNN(
 				mha_LSTMCell,
 				return_sequences = True
-			)(full_token_sequence, full_token_sequence)
+			)(full_token_sequence)
 
 			# implement refresh_pad_tokens argument that refreshes tokens between layers
 			if refresh_pad_tokens:
@@ -141,7 +141,7 @@ def create_att_bottleneck_model(
 			self_attention_tokens = tf.keras.layers.RNN(
 				mha_LSTMCell,
 				return_sequences = True
-			)(self_attention_tokens, self_attention_tokens)
+			)(self_attention_tokens)
 
 			if refresh_pad_tokens:
 				self_attention_tokens = tf.concat(
@@ -200,7 +200,8 @@ metadata_path: str,
 dataset_path: str,
 image_x: int = 128,
 image_y: int = 128,
-num_days_per_sample: int = 7):
+num_days_per_sample: int = 7,
+filter_dates = None):
 	with open(maps_path, "rb") as f:
 		maps = np.load(f)
 
@@ -229,6 +230,10 @@ num_days_per_sample: int = 7):
 	date_df["image_index"] = date_df.index
 
 	sorted_date_df = date_df.sort_values("date_actual", ascending = True)
+
+	if filter_dates is not None:
+
+		sorted_date_df = sorted_date_df[sorted_date_df["date_actual"].isin(filter_dates)]
 
 	raw_y_list = []
 	for d in sorted_date_df["date"].values:
@@ -296,7 +301,7 @@ def load_sequential_data_graph(covid_data_path, flight_data_path, num_days_per_s
 	formatted_y_infection = np.array(formatted_y_list_infection)
 	formatted_y_death = np.array(formatted_y_list_death)
 
-	return (formatted_X, formatted_adj_mat, formatted_y_infection, formatted_y_death)
+	return (formatted_X, formatted_adj_mat, formatted_y_infection, formatted_y_death), sorted_unique_dates
 
 def load_sequential_data(
 	maps_path: str,
@@ -307,20 +312,22 @@ def load_sequential_data(
 	image_y: int = 128,
 	num_days_per_sample = 7):
 
+	graph_data, unique_dates = load_sequential_data_graph(
+		covid_data_path,
+		flight_data_path,
+		num_days_per_sample
+	)
+
 	image_data = load_sequential_data_image(
 		maps_path,
 		metadata_path,
 		covid_data_path,
 		image_x,
 		image_y,
-		num_days_per_sample)
-	
-	graph_data = load_sequential_data_graph(
-		covid_data_path,
-		flight_data_path,
-		num_days_per_sample
+		num_days_per_sample,
+		filter_dates = unique_dates
 	)
-
+	
 	return image_data, graph_data
 
 
