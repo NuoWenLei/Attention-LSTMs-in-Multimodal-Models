@@ -70,7 +70,8 @@ name: str = "Conv2DAttentionLSTMModel"):
 	)(x)
 
 	if use_out_dense:
-		output = tf.keras.layers.Dense(output_size, activation = "linear")(mhaLSTM_2)
+		mhaLSTM_2_flattened = tf.reduce_mean(mhaLSTM_2, axis = [1, 2])
+		output = tf.keras.layers.Dense(output_size, activation = "linear")(mhaLSTM_2_flattened)
 	else:
 		output = mhaLSTM_2
 
