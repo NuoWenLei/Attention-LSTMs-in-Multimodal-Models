@@ -16,6 +16,7 @@ def create_att_bottleneck_model(
 	# image arguments
 	image_dims: tuple,
 	kernel_size: tuple,
+	maxpool_kernel: int,
 	# graph arguments
 	input_shape_nodes: tuple,
 	input_shape_edges: tuple,
@@ -72,9 +73,9 @@ def create_att_bottleneck_model(
 			)(x_image)
 
 			if use_maxpool:
-				x_image = tf.keras.layers.MaxPool3D((1,4,4))(x_image)
-				curr_image_dims[0] = curr_image_dims[0] // 4
-				curr_image_dims[1] = curr_image_dims[1] // 4
+				x_image = tf.keras.layers.MaxPool3D((1,maxpool_kernel,maxpool_kernel))(x_image)
+				curr_image_dims[0] = curr_image_dims[0] // maxpool_kernel
+				curr_image_dims[1] = curr_image_dims[1] // maxpool_kernel
 				curr_image_size = curr_image_dims[0] * curr_image_dims[1]
 
 			# Graph
@@ -195,6 +196,7 @@ def create_conv_att_bottleneck_model(
 	# image arguments
 	image_dims: tuple,
 	kernel_size: tuple,
+	maxpool_kernel: int,
 	# graph arguments
 	input_shape_nodes: tuple,
 	input_shape_edges: tuple,
@@ -238,9 +240,9 @@ def create_conv_att_bottleneck_model(
 			)(x_image)
 
 			if use_maxpool:
-				x_image = tf.keras.layers.MaxPool3D((1,4,4))(x_image)
-				curr_image_dims[0] = curr_image_dims[0] // 4
-				curr_image_dims[1] = curr_image_dims[1] // 4
+				x_image = tf.keras.layers.MaxPool3D((1,maxpool_kernel,maxpool_kernel))(x_image)
+				curr_image_dims[0] = curr_image_dims[0] // maxpool_kernel
+				curr_image_dims[1] = curr_image_dims[1] // maxpool_kernel
 				curr_image_size = curr_image_dims[0] * curr_image_dims[1]
 
 			# Graph
