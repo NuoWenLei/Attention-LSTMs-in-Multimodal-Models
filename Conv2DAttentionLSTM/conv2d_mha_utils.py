@@ -91,7 +91,8 @@ metadata_path: str,
 dataset_path: str,
 image_x: int = 128,
 image_y: int = 128,
-num_days_per_sample: int = 7):
+num_days_per_sample: int = 7,
+filter_dates = None):
 	with open(maps_path, "rb") as f:
 		maps = np.load(f)
 
@@ -107,8 +108,10 @@ num_days_per_sample: int = 7):
 
 	image_idx_dictionary = dict([(d, i) for i, d in enumerate(dates)])
 
+	print("Loading Image Indices...")
+
 	image_indices = []
-	for i, row in df.iterrows():
+	for i, row in tqdm(df.iterrows()):
 		image_indices.append(image_idx_dictionary[row["date"]])
 
 	df["image_index"] = image_indices
@@ -119,26 +122,35 @@ num_days_per_sample: int = 7):
 
 	sorted_date_df = date_df.sort_values("date_actual", ascending = True)
 
-	raw_y_list = []
+	if filter_dates is not None:
+
+		sorted_date_df = sorted_date_df[sorted_date_df["date_actual"].isin(filter_dates)]
+
+	raw_y_list_death = []
+	raw_y_list_infection = []
 	for d in sorted_date_df["date"].values:
-		raw_y_list.append(df[df["date"] == d]["death_rate_from_population"].values)
+		raw_y_list_death.append(df[df["date"] == d]["death_rate_from_population"].values)
+		raw_y_list_infection.append(df[df["date"] == d]["infection_rate"].values)
 
 	raw_X = maps[sorted_date_df["image_index"]]
 	raw_metadata = sorted_date_df
-	raw_y = np.array(raw_y_list)
+	raw_y_death = np.array(raw_y_list_death)
+	raw_y_infection = np.array(raw_y_list_infection)
 
 	formatted_X_list = []
-	formatted_y_list = []
+	formatted_y_list_death = []
+	formatted_y_list_infection = []
 	for i in range(raw_metadata.shape[0] - num_days_per_sample):
 		formatted_X_list.append([n for n in range(i, i + num_days_per_sample)])
 
-
-		formatted_y_list.append(raw_y[i + num_days_per_sample, ...])
+		formatted_y_list_death.append(raw_y_death[i + num_days_per_sample, ...])
+		formatted_y_list_infection.append(raw_y_infection[i + num_days_per_sample, ...])
 
 	formatted_X = np.array(formatted_X_list)
-	formatted_y = np.array(formatted_y_list)
+	formatted_y_death = np.array(formatted_y_list_death)
+	formatted_y_infection = np.array(formatted_y_list_infection)
 
-	return formatted_X, formatted_y, raw_X
+	return formatted_X, formatted_y_death, formatted_y_infection, raw_X
 
 def create_flow(X_indices, y, batch_size, raw_X):
 	index = 0
