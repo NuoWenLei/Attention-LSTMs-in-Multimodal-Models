@@ -236,6 +236,8 @@ def create_conv_att_bottleneck_model(
 			x_image = tf.keras.layers.ConvLSTM2D(
 				filters = d_model,
 				kernel_size = kernel_size,
+				padding = "same",
+				return_sequences = True,
 				name = f"{name}_convLSTM_{i}"
 			)(x_image)
 
