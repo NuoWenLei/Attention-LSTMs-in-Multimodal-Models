@@ -235,26 +235,31 @@ filter_dates = None):
 
 		sorted_date_df = sorted_date_df[sorted_date_df["date_actual"].isin(filter_dates)]
 
-	raw_y_list = []
+	raw_y_list_death = []
+	raw_y_list_infection = []
 	for d in sorted_date_df["date"].values:
-		raw_y_list.append(df[df["date"] == d]["death_rate_from_population"].values)
+		raw_y_list_death.append(df[df["date"] == d]["death_rate_from_population"].values)
+		raw_y_list_infection.append(df[df["date"] == d]["infection_rate"].values)
 
 	raw_X = maps[sorted_date_df["image_index"]]
 	raw_metadata = sorted_date_df
-	raw_y = np.array(raw_y_list)
+	raw_y_death = np.array(raw_y_list_death)
+	raw_y_infection = np.array(raw_y_list_infection)
 
 	formatted_X_list = []
-	formatted_y_list = []
+	formatted_y_list_death = []
+	formatted_y_list_infection = []
 	for i in range(raw_metadata.shape[0] - num_days_per_sample):
 		formatted_X_list.append([n for n in range(i, i + num_days_per_sample)])
 
-
-		formatted_y_list.append(raw_y[i + num_days_per_sample, ...])
+		formatted_y_list_death.append(raw_y_death[i + num_days_per_sample, ...])
+		formatted_y_list_infection.append(raw_y_infection[i + num_days_per_sample, ...])
 
 	formatted_X = np.array(formatted_X_list)
-	formatted_y = np.array(formatted_y_list)
+	formatted_y_death = np.array(formatted_y_list_death)
+	formatted_y_infection = np.array(formatted_y_list_infection)
 
-	return formatted_X, formatted_y, raw_X
+	return formatted_X, formatted_y_death, formatted_y_infection, raw_X
 
 def load_graph_data(covid_data_path, flight_data_path):
 	flight_df = pd.read_csv(flight_data_path)
