@@ -1,4 +1,4 @@
-from imports import tf, Iterable, np, json, pd, date
+from imports import tf, Iterable, np, json, pd, date, tqdm
 from Conv2DmhaLSTMCell import Conv2DmhaLSTMCell
 
 def create_conv_mha_lstm_model(layer_units: Iterable,
