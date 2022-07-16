@@ -171,9 +171,9 @@ def create_att_bottleneck_model(
 
 	graph_tokens = mhaLSTM_2[:, curr_image_size + num_pad_tokens:, :]
 
-	image_tokens_sum = tf.reduce_sum(image_tokens, axis = 1)
+	image_tokens_sum = tf.reduce_mean(image_tokens, axis = 1)
 
-	graph_tokens_sum = tf.reduce_sum(graph_tokens, axis = 1)
+	graph_tokens_sum = tf.reduce_mean(graph_tokens, axis = 1)
 
 	image_dense = tf.keras.layers.Dense(output_size, activation = "linear")(image_tokens_sum)
 
@@ -340,9 +340,9 @@ def create_conv_att_bottleneck_model(
 
 	graph_tokens = mhaLSTM_2[:, curr_image_size + num_pad_tokens:, :]
 
-	image_tokens_sum = tf.reduce_sum(image_tokens, axis = 1)
+	image_tokens_sum = tf.reduce_mean(image_tokens, axis = 1)
 
-	graph_tokens_sum = tf.reduce_sum(graph_tokens, axis = 1)
+	graph_tokens_sum = tf.reduce_mean(graph_tokens, axis = 1)
 
 	image_dense = tf.keras.layers.Dense(output_size, activation = "linear")(image_tokens_sum)
 
