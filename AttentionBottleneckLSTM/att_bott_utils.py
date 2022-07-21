@@ -1,4 +1,4 @@
-from imports import tf, Iterable, np, json, pd, date, nx, tqdm
+from imports import tf, Iterable, np, json, pd, date, nx, tqdm, NoDependency
 from Conv2DmhaLSTMCell import Conv2DmhaLSTMCell
 from MultiHeadGraphAttentionLSTMCell import MultiHeadGraphAttentionLSTMCell
 from MultiHeadAttentionLSTMCell import MultiHeadAttentionLSTMCell
@@ -74,6 +74,8 @@ def create_att_bottleneck_model(
 
 			if use_maxpool:
 				x_image = tf.keras.layers.MaxPool3D((1,maxpool_kernel,maxpool_kernel))(x_image)
+				x_image = tf.keras.layers.LeakyReLU()(x_image)
+				x_image = tf.keras.layers.LayerNormalization()(x_image)
 				curr_image_dims[0] = curr_image_dims[0] // maxpool_kernel
 				curr_image_dims[1] = curr_image_dims[1] // maxpool_kernel
 				curr_image_size = curr_image_dims[0] * curr_image_dims[1]
@@ -94,11 +96,14 @@ def create_att_bottleneck_model(
 				return_sequences = True
 			)((x_graph, input_adj_mats))
 
+			x_graph = tf.keras.layers.LeakyReLU()(x_graph)
+			x_graph = tf.keras.layers.LayerNormalization()(x_graph)
+
 
 		# reshape tokens and first pass through MultiHeadAttentionLSTMCell
 		elif i == join_layer:
 
-			x_image_tokens = tf.reshape(x_image, (b, sequence_length, -1, d_model))
+			x_image_tokens = tf.reshape(x_image, (b, sequence_length, curr_image_size, d_model))
 
 			full_token_sequence = tf.concat([x_image_tokens, tf.zeros((b, sequence_length, num_pad_tokens, d_model)), x_graph], axis = 2)
 
@@ -117,6 +122,9 @@ def create_att_bottleneck_model(
 				return_sequences = True
 			)(full_token_sequence)
 
+			self_attention_tokens = tf.keras.layers.LeakyReLU()(self_attention_tokens)
+			self_attention_tokens = tf.keras.layers.LayerNormalization()(self_attention_tokens)
+			
 			# implement refresh_pad_tokens argument that refreshes tokens between layers
 			if refresh_pad_tokens:
 				self_attention_tokens = tf.concat(
@@ -144,6 +152,9 @@ def create_att_bottleneck_model(
 				return_sequences = True
 			)(self_attention_tokens)
 
+			self_attention_tokens = tf.keras.layers.LeakyReLU()(self_attention_tokens)
+			self_attention_tokens = tf.keras.layers.LayerNormalization()(self_attention_tokens)
+
 			if refresh_pad_tokens:
 				self_attention_tokens = tf.concat(
 					[
@@ -167,13 +178,212 @@ def create_att_bottleneck_model(
 		return_sequences = False
 	)(self_attention_tokens)
 
+	mhaLSTM_2 = tf.keras.layers.LeakyReLU()(mhaLSTM_2)
+	mhaLSTM_2 = tf.keras.layers.LayerNormalization()(mhaLSTM_2)
+
 	image_tokens = mhaLSTM_2[:, :curr_image_size, :]
 
 	graph_tokens = mhaLSTM_2[:, curr_image_size + num_pad_tokens:, :]
 
-	image_tokens_sum = tf.reduce_mean(image_tokens, axis = 1)
+	image_tokens_sum = tf.reduce_sum(image_tokens, axis = 1)
 
-	graph_tokens_sum = tf.reduce_mean(graph_tokens, axis = 1)
+	graph_tokens_sum = tf.reduce_sum(graph_tokens, axis = 1)
+
+	image_tokens_norm = tf.keras.layers.LayerNormalization()(image_tokens_sum)
+
+	graph_tokens_norm = tf.keras.layers.LayerNormalization()(graph_tokens_sum)
+
+	image_dense = tf.keras.layers.Dense(output_size, activation = "linear")(image_tokens_norm)
+
+	graph_dense = tf.keras.layers.Dense(output_size, activation = "linear")(graph_tokens_norm)
+
+	output = (image_dense + graph_dense) / tf.constant(2.)
+
+	return tf.keras.models.Model(inputs = [input_layer_image, input_nodes, input_adj_mats], outputs = output, name = name)
+
+def create_att_bottleneck_model_2(
+	# global arguments
+	layer_units: Iterable,
+	sequence_length: int,
+	num_heads: int,
+	num_pad_tokens: int,
+	join_layer: int,
+	refresh_pad_tokens: bool,
+	d_model: int,
+	output_size: int,
+	# image arguments
+	image_dims: dict, # dictionary format to bypass dependency issues when saving model weights
+	# https://github.com/tensorflow/tensorflow/issues/36916
+	kernel_size: tuple,
+	maxpool_kernel: int,
+	# graph arguments
+	input_shape_nodes: tuple,
+	input_shape_edges: tuple,
+	sequence_length_graph: int,
+	residual: bool,
+	use_bias: bool,
+	# defaulted image arguments
+	activation = tf.keras.activations.tanh,
+	recurrent_activation = tf.keras.activations.hard_sigmoid,
+	mha_feature_activation: str = "relu",
+	mha_output_activation: str = "linear",
+	use_maxpool: bool = True,
+	# defaulted graph arguments
+	concat_output: bool = False,
+	# global defaulted arguments
+	name: str = "Conv2DAttentionLSTMModel"):
+
+	assert join_layer < len(layer_units), "Layer to join is out of bounds"
+
+	# kernel_size = calc_kernel_size(image_dims, blocks_y, blocks_x)
+
+	input_layer_image = tf.keras.layers.Input(shape = [sequence_length,] + [image_dims["0"], image_dims["1"], 1])
+
+	input_nodes = tf.keras.layers.Input(shape = input_shape_nodes)
+	input_adj_mats = tf.keras.layers.Input(shape = input_shape_edges)
+	curr_image_dims = image_dims
+	curr_image_size = curr_image_dims["0"] * curr_image_dims["1"]
+	b = tf.shape(input_layer_image)[0]
+
+	x_image = input_layer_image
+	x_graph = input_nodes
+
+	for i in range(len(layer_units) - 1):
+
+		if i < (join_layer - 1):
+
+			# Image
+			mhaLSTM_cell_image = Conv2DmhaLSTMCell(
+				units = layer_units[i],
+				num_heads = num_heads,
+				d_model = d_model,
+				image_dims = NoDependency([curr_image_dims["0"], curr_image_dims["1"], 1]),
+				kernel_size = kernel_size,
+				name = f"{name}_mhaLSTMCell_{i}",
+				activation = activation,
+				recurrent_activation = recurrent_activation,
+				mha_feature_activation = mha_feature_activation,
+				mha_output_activation = mha_output_activation
+			)
+			x_image = tf.keras.layers.RNN(
+				mhaLSTM_cell_image,
+				return_sequences = True
+			)(x_image)
+
+			if use_maxpool:
+				x_image = tf.keras.layers.MaxPool3D((1,maxpool_kernel,maxpool_kernel))(x_image)
+				x_image = tf.keras.layers.LayerNormalization()(x_image)
+				curr_image_dims["0"] = curr_image_dims["0"] // maxpool_kernel
+				curr_image_dims["1"] = curr_image_dims["1"] // maxpool_kernel
+				curr_image_size = curr_image_dims["0"] * curr_image_dims["1"]
+
+			# Graph
+			mhgaLSTM_cell_graph = MultiHeadGraphAttentionLSTMCell(
+				units = layer_units[i],
+				num_heads = num_heads,
+				sequence_length = sequence_length_graph,
+				output_size = d_model,
+				residual = residual,
+				concat_output = concat_output,
+				use_bias = use_bias,
+				name = f"{name}_cell_{i}"
+			)
+			x_graph = tf.keras.layers.RNN(
+				mhgaLSTM_cell_graph,
+				return_sequences = True
+			)((x_graph, input_adj_mats))
+
+			x_graph = tf.keras.layers.LayerNormalization()(x_graph)
+
+
+		# reshape tokens and first pass through MultiHeadAttentionLSTMCell
+		elif i == (join_layer - 1):
+
+			# Image
+			mhaLSTM_cell_image = Conv2DmhaLSTMCell(
+				units = layer_units[i],
+				num_heads = num_heads,
+				d_model = d_model,
+				image_dims = NoDependency([curr_image_dims["0"], curr_image_dims["1"], 1]),
+				kernel_size = kernel_size,
+				name = f"{name}_mhaLSTMCell_{i}",
+				activation = activation,
+				recurrent_activation = recurrent_activation,
+				mha_feature_activation = mha_feature_activation,
+				mha_output_activation = mha_output_activation
+			)
+			x_image = tf.keras.layers.RNN(
+				mhaLSTM_cell_image,
+				return_sequences = False
+			)(x_image)
+
+			if use_maxpool:
+				x_image = tf.keras.layers.MaxPool2D((maxpool_kernel,maxpool_kernel))(x_image)
+				x_image = tf.keras.layers.LayerNormalization()(x_image)
+				curr_image_dims["0"] = curr_image_dims["0"] // maxpool_kernel
+				curr_image_dims["1"] = curr_image_dims["1"] // maxpool_kernel
+				curr_image_size = curr_image_dims["0"] * curr_image_dims["1"]
+
+			# Graph
+			mhgaLSTM_cell_graph = MultiHeadGraphAttentionLSTMCell(
+				units = layer_units[i],
+				num_heads = num_heads,
+				sequence_length = sequence_length_graph,
+				output_size = d_model,
+				residual = residual,
+				concat_output = concat_output,
+				use_bias = use_bias,
+				name = f"{name}_cell_{i}"
+			)
+			x_graph = tf.keras.layers.RNN(
+				mhgaLSTM_cell_graph,
+				return_sequences = False
+			)((x_graph, input_adj_mats))
+
+			x_graph = tf.keras.layers.LayerNormalization()(x_graph)
+
+			x_image_tokens = tf.reshape(x_image, (b, curr_image_size, d_model))
+
+			self_attention_tokens = tf.concat([x_image_tokens, tf.zeros((b, num_pad_tokens, d_model)), x_graph], axis = 1)
+
+		# normal pass through with MultiHeadAttentionLSTMCell
+		else:
+
+			self_attention_tokens = tf.keras.layers.MultiHeadAttention(
+				num_heads = num_heads,
+				key_dim = d_model,
+				attention_axes = 1
+			)(self_attention_tokens, self_attention_tokens)
+
+			self_attention_tokens = tf.keras.layers.LayerNormalization()(self_attention_tokens)
+
+			if refresh_pad_tokens:
+				self_attention_tokens = tf.concat(
+					[
+						self_attention_tokens[:, :curr_image_size, :],
+						tf.zeros((b, num_pad_tokens, d_model)),
+						self_attention_tokens[:, curr_image_size + num_pad_tokens:, :]],
+						axis = 1)
+
+	mhaLSTM_2 = tf.keras.layers.MultiHeadAttention(
+		num_heads = num_heads,
+		key_dim = d_model,
+		attention_axes = 1
+	)(self_attention_tokens, self_attention_tokens)
+
+	mhaLSTM_2 = tf.keras.layers.LayerNormalization()(mhaLSTM_2)
+
+	image_tokens = mhaLSTM_2[:, :curr_image_size, :]
+
+	graph_tokens = mhaLSTM_2[:, curr_image_size + num_pad_tokens:, :]
+
+	image_tokens_sum = tf.reduce_sum(image_tokens, axis = 2)
+
+	graph_tokens_sum = tf.reduce_sum(graph_tokens, axis = 2)
+
+	# image_tokens_norm = tf.keras.layers.LayerNormalization()(image_tokens_sum)
+
+	# graph_tokens_norm = tf.keras.layers.LayerNormalization()(graph_tokens_sum)
 
 	image_dense = tf.keras.layers.Dense(output_size, activation = "linear")(image_tokens_sum)
 
@@ -243,6 +453,7 @@ def create_conv_att_bottleneck_model(
 
 			if use_maxpool:
 				x_image = tf.keras.layers.MaxPool3D((1,maxpool_kernel,maxpool_kernel))(x_image)
+				x_image = tf.keras.layers.LeakyReLU()(x_image)
 				curr_image_dims[0] = curr_image_dims[0] // maxpool_kernel
 				curr_image_dims[1] = curr_image_dims[1] // maxpool_kernel
 				curr_image_size = curr_image_dims[0] * curr_image_dims[1]
@@ -263,11 +474,13 @@ def create_conv_att_bottleneck_model(
 				return_sequences = True
 			)((x_graph, input_adj_mats))
 
+			x_graph = tf.keras.layers.LeakyReLU()(x_graph)
+
 
 		# reshape tokens and first pass through MultiHeadAttentionLSTMCell
 		elif i == join_layer:
 
-			x_image_tokens = tf.reshape(x_image, (b, sequence_length, -1, d_model))
+			x_image_tokens = tf.reshape(x_image, (b, sequence_length, curr_image_size, d_model))
 
 			full_token_sequence = tf.concat([x_image_tokens, tf.zeros((b, sequence_length, num_pad_tokens, d_model)), x_graph], axis = 2)
 
@@ -340,9 +553,9 @@ def create_conv_att_bottleneck_model(
 
 	graph_tokens = mhaLSTM_2[:, curr_image_size + num_pad_tokens:, :]
 
-	image_tokens_sum = tf.reduce_mean(image_tokens, axis = 1)
+	image_tokens_sum = tf.reduce_sum(image_tokens, axis = 1)
 
-	graph_tokens_sum = tf.reduce_mean(graph_tokens, axis = 1)
+	graph_tokens_sum = tf.reduce_sum(graph_tokens, axis = 1)
 
 	image_dense = tf.keras.layers.Dense(output_size, activation = "linear")(image_tokens_sum)
 
