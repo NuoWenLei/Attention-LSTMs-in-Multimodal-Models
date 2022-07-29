@@ -1,3 +1,9 @@
+# See https://github.com/keras-team/keras/blob/v2.9.0/keras/layers/rnn/base_conv_lstm.py#L197
+# to create MultiHeadGraphAttentionLSTMCell layer
+#
+# See https://github.com/keras-team/keras/blob/07e13740fd181fc3ddec7d9a594d8a08666645f6/keras/layers/rnn/base_conv_lstm.py#L277
+# for changes needed in base function for recurrent compatibility
+
 from imports import tf, Iterable
 from Conv2DMHAUnit import Conv2DMHAUnit
 

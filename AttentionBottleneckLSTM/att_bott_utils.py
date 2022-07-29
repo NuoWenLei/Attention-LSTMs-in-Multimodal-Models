@@ -37,16 +37,22 @@ def create_att_bottleneck_model(
 
 	assert join_layer < len(layer_units), "Layer to join is out of bounds"
 
-	# kernel_size = calc_kernel_size(image_dims, blocks_y, blocks_x)
-
+	# image input
 	input_layer_image = tf.keras.layers.Input(shape = [sequence_length,] + [image_dims["0"], image_dims["1"], 1])
 
-	input_nodes = tf.keras.layers.Input(shape = input_shape_nodes)
-	input_adj_mats = tf.keras.layers.Input(shape = input_shape_edges)
+	# graph inputs
+	input_nodes = tf.keras.layers.Input(shape = input_shape_nodes) # nodes
+	input_adj_mats = tf.keras.layers.Input(shape = input_shape_edges) # edges
+
+	# init variables to keep track of image dimension and size
 	curr_image_dims = image_dims
 	curr_image_size = curr_image_dims["0"] * curr_image_dims["1"]
+
+	# get batch shape for reshaping purposes
 	b = tf.shape(input_layer_image)[0]
 
+	# reassign inputs to new variables
+	# to allow these tensors to be self-updated
 	x_image = input_layer_image
 	x_graph = input_nodes
 
@@ -72,6 +78,7 @@ def create_att_bottleneck_model(
 				return_sequences = True
 			)(x_image)
 
+			# update image dimensions if maxpool
 			if use_maxpool:
 				x_image = tf.keras.layers.MaxPool3D((1,maxpool_kernel,maxpool_kernel))(x_image)
 				x_image = tf.keras.layers.LayerNormalization()(x_image)
@@ -119,6 +126,7 @@ def create_att_bottleneck_model(
 				return_sequences = False
 			)(x_image)
 
+			# update image dimensions if maxpool
 			if use_maxpool:
 				x_image = tf.keras.layers.MaxPool2D((maxpool_kernel,maxpool_kernel))(x_image)
 				x_image = tf.keras.layers.LayerNormalization()(x_image)
@@ -144,11 +152,16 @@ def create_att_bottleneck_model(
 
 			x_graph = tf.keras.layers.LayerNormalization()(x_graph)
 
+			# flatten image x and y dimensions
+			#
+			# curr_image_size must be provided
+			# to ensure that the tensor shape for dimension 2 is not None.
+			# If dimension 2 is None, concatenation along that dimension would propagate None shape
 			x_image_tokens = tf.reshape(x_image, (b, curr_image_size, d_model))
 
 			self_attention_tokens = tf.concat([x_image_tokens, tf.zeros((b, num_pad_tokens, d_model)), x_graph], axis = 1)
 
-		# normal pass through with MultiHeadAttentionLSTMCell
+		# self attention of tokens through MultiHeadAttention
 		else:
 
 			self_attention_tokens = tf.keras.layers.MultiHeadAttention(
@@ -159,6 +172,7 @@ def create_att_bottleneck_model(
 
 			self_attention_tokens = tf.keras.layers.LayerNormalization()(self_attention_tokens)
 
+			# if refresh_pad_tokens, reset pad tokens to zeros.
 			if refresh_pad_tokens:
 				self_attention_tokens = tf.concat(
 					[
@@ -167,6 +181,7 @@ def create_att_bottleneck_model(
 						self_attention_tokens[:, curr_image_size + num_pad_tokens:, :]],
 						axis = 1)
 
+	# Last MultiHeadAttention
 	mhaLSTM_2 = tf.keras.layers.MultiHeadAttention(
 		num_heads = num_heads,
 		key_dim = d_model,
@@ -175,18 +190,17 @@ def create_att_bottleneck_model(
 
 	mhaLSTM_2 = tf.keras.layers.LayerNormalization()(mhaLSTM_2)
 
+	# separate tokens based on position
 	image_tokens = mhaLSTM_2[:, :curr_image_size, :]
 
 	graph_tokens = mhaLSTM_2[:, curr_image_size + num_pad_tokens:, :]
 
+	# sum by d_model to preserve as much modality-specific info as possible
 	image_tokens_sum = tf.reduce_sum(image_tokens, axis = 2)
 
 	graph_tokens_sum = tf.reduce_sum(graph_tokens, axis = 2)
 
-	# image_tokens_norm = tf.keras.layers.LayerNormalization()(image_tokens_sum)
-
-	# graph_tokens_norm = tf.keras.layers.LayerNormalization()(graph_tokens_sum)
-
+	# predict separate regression outputs for each modality and average results
 	image_dense = tf.keras.layers.Dense(output_size, activation = "linear")(image_tokens_sum)
 
 	graph_dense = tf.keras.layers.Dense(output_size, activation = "linear")(graph_tokens_sum)
@@ -194,19 +208,6 @@ def create_att_bottleneck_model(
 	output = (image_dense + graph_dense) / tf.constant(2.)
 
 	return tf.keras.models.Model(inputs = [input_layer_image, input_nodes, input_adj_mats], outputs = output, name = name)
-
-def calc_kernel_size(image_dims, blocks_y, blocks_x):
-	y_complete = (image_dims[0] % blocks_y == 0)
-	x_complete = (image_dims[1] % blocks_x == 0)
-	kernel_size = [image_dims[0] // blocks_y, image_dims[1] // blocks_x]
-
-	if not y_complete:
-		kernel_size[0] += 1
-
-	if not x_complete:
-		kernel_size[1] += 1
-
-	return kernel_size
 	
 def load_sequential_data_image(maps_path: str,
 metadata_path: str,
@@ -214,51 +215,68 @@ dataset_path: str,
 image_x: int = 128,
 image_y: int = 128,
 num_days_per_sample: int = 7,
+# filter_dates is used to make sure the sample size for image and graph are equal
 filter_dates = None):
+
+	# load raw data
 	with open(maps_path, "rb") as f:
 		maps = np.load(f)
 
 	with open(metadata_path, "r") as meta_json:
 		metadata = json.load(meta_json)
 
+	# resize maps and pad to desired x and y
 	maps = tf.image.resize_with_pad(maps, image_x, image_y).numpy()
 
+	# read covid dataset
 	df = pd.read_csv(dataset_path)
 
+	# create dates formatted both m/d/y and Y/M/D to fit formats from maps and COVID dataset
 	dates = [date(int("20" + str(y)), m, d).strftime("%-m/%-d/%y") for y, m, d in metadata]
 	dates_ordered = [date(int("20" + str(y)), m, d).strftime("%Y/%m/%d") for y, m, d in metadata]
 
+	# create dictionary that maps each date to an index
 	image_idx_dictionary = dict([(d, i) for i, d in enumerate(dates)])
 
 	print("Loading Image Indices...")
 
+	# Get the desired order of images from COVID dataset date order
 	image_indices = []
 	for i, row in tqdm(df.iterrows()):
 		image_indices.append(image_idx_dictionary[row["date"]])
 
+	# link each row of COVID daataset to an image
 	df["image_index"] = image_indices
 
+	# create a dataframe that matches the corresponding m/d/y dates, Y/M/D dates, and image indices
 	date_df = pd.DataFrame({"date": dates, "date_actual": dates_ordered})
-
 	date_df["image_index"] = date_df.index
 
+	# sort the dates dataframe by time from past to future
 	sorted_date_df = date_df.sort_values("date_actual", ascending = True)
 
+
+	# filter by filter_dates
 	if filter_dates is not None:
 
 		sorted_date_df = sorted_date_df[sorted_date_df["date_actual"].isin(filter_dates)]
 
+	# for every day, flatten infection and death rates for the 49 state and store in lists
 	raw_y_list_death = []
 	raw_y_list_infection = []
 	for d in sorted_date_df["date"].values:
 		raw_y_list_death.append(df[df["date"] == d]["death_rate_from_population"].values)
 		raw_y_list_infection.append(df[df["date"] == d]["infection_rate"].values)
 
+	# sort maps by chronological order of dates
 	raw_X = maps[sorted_date_df["image_index"]]
+
 	raw_metadata = sorted_date_df
 	raw_y_death = np.array(raw_y_list_death)
 	raw_y_infection = np.array(raw_y_list_infection)
 
+	# add sequence dimension to data
+	# format each sample to have length num_days_per_sample for sequence dimension
 	formatted_X_list = []
 	formatted_y_list_death = []
 	formatted_y_list_infection = []
@@ -272,17 +290,25 @@ filter_dates = None):
 	formatted_y_death = np.array(formatted_y_list_death)
 	formatted_y_infection = np.array(formatted_y_list_infection)
 
+	# return results
 	return formatted_X, formatted_y_death, formatted_y_infection, raw_X
 
 def load_graph_data(covid_data_path, flight_data_path):
+	# load raw data
 	flight_df = pd.read_csv(flight_data_path)
 	covid_df = pd.read_csv(covid_data_path)
+	
+	# reformat dates
 	covid_df["adjusted_date"] = [date(int("20" + y), int(m), int(d)).strftime("%Y/%m/%d") for m, d, y in covid_df["date"].str.split("/")]
+
+	# find dates missing from flight data
+	# filter covid_df to only include dates with flight data
 	adj_dates = set(flight_df.columns[2:])
 	covid_dates = set(covid_df["adjusted_date"].values)
 	adj_dates_lacked = covid_dates.difference(adj_dates)
 	covid_df = covid_df[~covid_df["adjusted_date"].isin(list(adj_dates_lacked))]
 
+	# create adjacency matrices by creating networkX Graphs
 	adj_matrices = []
 	for d in flight_df.columns[2:]:
 		G = nx.from_pandas_edgelist(df = flight_df, source = "state_from", target = "state_to", edge_attr = d)
@@ -290,21 +316,31 @@ def load_graph_data(covid_data_path, flight_data_path):
 		adj_matrices.append(A.todense())
 	ADJ_MATRICES = np.array(adj_matrices)
 
+	# return results
+	# ADJ_MATRICES are like edges
+	# covid_df are like nodes
 	return ADJ_MATRICES, covid_df
 
 def load_sequential_data_graph(covid_data_path, flight_data_path, num_days_per_sample = 7):
+	# Load non-sequential graph data
 	ADJ_MATRICES, covid_df = load_graph_data(covid_data_path, flight_data_path)
+
+	# create unique dates
 	sorted_unique_dates = np.sort(covid_df["adjusted_date"].unique())
 
+	# init sequence lists
 	print("Generating Sequential Data...")
 	formatted_X_list = []
 	formatted_adj_mat_list = []
 	formatted_y_list_infection = []
 	formatted_y_list_death = []
+
+	# define valid cols
 	valid_cols = ["Population", "confirm_value", "death_value", "infection_rate", "death_rate_from_population"]
 
 	print("Loading Sequential Graph Data...")
 
+	# add sequence dimension to graph data
 	for i in tqdm(range(sorted_unique_dates.shape[0] - num_days_per_sample)):
 		formatted_X_list.append([covid_df[covid_df["adjusted_date"] == d][valid_cols].values for d in sorted_unique_dates[i:i + num_days_per_sample]])
 
@@ -319,6 +355,7 @@ def load_sequential_data_graph(covid_data_path, flight_data_path, num_days_per_s
 	formatted_y_infection = np.array(formatted_y_list_infection)
 	formatted_y_death = np.array(formatted_y_list_death)
 
+	# return data
 	return (formatted_X, formatted_adj_mat, formatted_y_infection, formatted_y_death), sorted_unique_dates
 
 def load_sequential_data(
@@ -330,12 +367,14 @@ def load_sequential_data(
 	image_y: int = 128,
 	num_days_per_sample = 7):
 
+	# create graph sequence data
 	graph_data, unique_dates = load_sequential_data_graph(
 		covid_data_path,
 		flight_data_path,
 		num_days_per_sample
 	)
 
+	# create image sequence data filtered by graph sequence unique dates
 	image_data = load_sequential_data_image(
 		maps_path,
 		metadata_path,
@@ -366,20 +405,26 @@ def create_flow(
 		X_node_sample = []
 		X_edge_sample = []
 		y_sample = []
+
+		# create batch sample per call
 		for _ in range(batch_size):
 			X_image_sample.append(raw_X[X_indices[index, ...]])
 			X_node_sample.append(X_nodes[index, ...])
 			X_edge_sample.append(X_edges[index, ...])
 			y_sample.append(y[index, ...])
 			index += 1
+
+			# reset index when samples ran out
 			if index >= X_indices.shape[0]:
 				index = 0
+				# shuffle samples after every index reset
 				p = np.random.permutation(y.shape[0])
 				X_indices = X_indices[p]
 				X_nodes = X_nodes[p]
 				X_edges = X_edges[p]
 				y = y[p]
-
+				
+		# yield batch samples
 		yield ((
 			np.float32(X_image_sample),
 			np.float32(X_node_sample),
@@ -387,6 +432,20 @@ def create_flow(
 			),
 			np.float32(y_sample))
 
+# DEPRICATED FUNCTIONS
+
+# def calc_kernel_size(image_dims, blocks_y, blocks_x):
+# 	y_complete = (image_dims[0] % blocks_y == 0)
+# 	x_complete = (image_dims[1] % blocks_x == 0)
+# 	kernel_size = [image_dims[0] // blocks_y, image_dims[1] // blocks_x]
+
+# 	if not y_complete:
+# 		kernel_size[0] += 1
+
+# 	if not x_complete:
+# 		kernel_size[1] += 1
+
+# 	return kernel_size
 
 # DEPRICATED MODEL STRUCTURES
 

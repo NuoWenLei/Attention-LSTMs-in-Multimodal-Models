@@ -74,10 +74,12 @@ class Conv2DMHAUnit(tf.keras.layers.Layer):
 
 		q_features /= (self.d_model ** .5)
 
+		# split heads
 		q_heads = tf.reshape(q_features, (b, self.num_heads, h, w, self.query_size))
 		k_heads = tf.reshape(k_features, (b, self.num_heads, h, w, self.query_size))
 		v_heads = tf.reshape(v_features, (b, self.num_heads, h, w, self.query_size))
 
+		# pad to allow for kernel splits
 		if not (self.x_complete and self.y_complete):
 
 			padding = tf.constant([
@@ -98,6 +100,7 @@ class Conv2DMHAUnit(tf.keras.layers.Layer):
 			padded_k_heads = k_heads
 			padded_v_heads = v_heads
 		
+		# reshape to add kernels
 		padded_q_heads = tf.reshape(
 			padded_q_heads,
 			(b,
@@ -128,8 +131,8 @@ class Conv2DMHAUnit(tf.keras.layers.Layer):
 			self.kernel_size[1])
 		)
 
+		# create attention score
 		attention = tf.einsum("...ijk,...njk->...injk", padded_q_heads, padded_k_heads)
-
 		softmax_attention_score = tf.math.softmax(attention)
 
 		# Use einsum for matmul with different ranked tensors

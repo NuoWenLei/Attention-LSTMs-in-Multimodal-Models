@@ -30,12 +30,15 @@ class MultiHeadGraphAttention(tf.keras.layers.Layer):
                                      ) for i in range(self.num_heads)]
     
   def call(self, inputs):
+    # init resulting attention tensors
     attns = []
 
+    # use each head to process inputs
     for head in self.heads:
       head_output = head(inputs)
       attns.append(head_output)
 
+    # concat or average attention tensors based on options
     if self.concat_output:
       output = tf.concat(attns, axis = -1)
     else:
