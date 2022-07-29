@@ -1,7 +1,7 @@
 from imports import tf, Iterable, np, json, pd, date, nx, tqdm, NoDependency
 from Conv2DmhaLSTMCell import Conv2DmhaLSTMCell
 from MultiHeadGraphAttentionLSTMCell import MultiHeadGraphAttentionLSTMCell
-from MultiHeadAttentionLSTMCell import MultiHeadAttentionLSTMCell
+# from MultiHeadAttentionLSTMCell import MultiHeadAttentionLSTMCell
 
 def create_att_bottleneck_model(
 	# global arguments
@@ -423,7 +423,7 @@ def create_flow(
 				X_nodes = X_nodes[p]
 				X_edges = X_edges[p]
 				y = y[p]
-				
+
 		# yield batch samples
 		yield ((
 			np.float32(X_image_sample),
