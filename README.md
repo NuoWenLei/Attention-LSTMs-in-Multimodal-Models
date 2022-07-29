@@ -20,6 +20,6 @@ This repository contains all models, experiments, and results from the paper _At
 - `Results_metric.xlsx` contains the organized results that are also shown in the paper
 - `imports.py` is a file that contains all library imports needed for models. Due to some modules being session-based (Ex: TensorFlow), taking all imports from a single source makes sure only one session is created.
 
-## Prediction Result with minimal model weights and 20 training epochs
+## Prediction results with AttentionBottleneckLSTM in 20 training epochs
 
 ![Alt Text](https://github.com/NuoWenLei/Attention-LSTMs-in-Multimodal-Models/blob/main/infection_maps_true_v_pred.gif)
