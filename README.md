@@ -22,3 +22,4 @@ This repository contains all models, experiments, and results from the paper _At
 
 ## Prediction Result with minimal model weights and 20 training epochs
 
+![Alt Text](https://github.com/NuoWenLei/Attention-LSTMs-in-Multimodal-Models/blob/main/infection_maps_true_v_pred.gif)
