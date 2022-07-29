@@ -28,4 +28,4 @@ This repository contains all models, experiments, and results from the paper _At
 
 ### LSTM Late Fusion Model
 
-![Alt Text](https://github.com/NuoWenLei/Attention-LSTMs-in-Multimodal-Models/blob/main/infection_maps_true_v_pred_attention.gif)
+![Alt Text](https://github.com/NuoWenLei/Attention-LSTMs-in-Multimodal-Models/blob/main/infection_maps_true_v_pred_lstm.gif)
