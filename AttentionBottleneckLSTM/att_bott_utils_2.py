@@ -5,7 +5,7 @@ from MultiHeadGraphAttentionLSTMCell import MultiHeadGraphAttentionLSTMCell
 
 def create_att_bottleneck_seq2seq(
 	# global arguments
-	encoer_layer_units: Iterable,
+	encoder_layer_units: Iterable,
 	sequence_length: int,
 	num_heads: int,
 	num_pad_tokens: int,
@@ -36,7 +36,7 @@ def create_att_bottleneck_seq2seq(
 	# global defaulted arguments
 	name: str = "Seq2SeqAttBottleneck"):
 
-	assert join_layer < len(encoer_layer_units), "Layer to join is out of bounds"
+	assert join_layer < len(encoder_layer_units), "Layer to join is out of bounds"
 
 	# image input
 	input_layer_image = tf.keras.layers.Input(shape = [sequence_length,] + [image_dims["0"], image_dims["1"], 1])
@@ -57,13 +57,13 @@ def create_att_bottleneck_seq2seq(
 	x_image = input_layer_image
 	x_graph = input_nodes
 
-	for i in range(len(encoer_layer_units) - 1):
+	for i in range(len(encoder_layer_units) - 1):
 
 		if i < (join_layer - 1):
 
 			# Image
 			mhaLSTM_cell_image = Conv2DmhaLSTMCell(
-				units = encoer_layer_units[i],
+				units = encoder_layer_units[i],
 				num_heads = num_heads,
 				d_model = d_model,
 				image_dims = NoDependency([curr_image_dims["0"], curr_image_dims["1"], 1]),
@@ -89,7 +89,7 @@ def create_att_bottleneck_seq2seq(
 
 			# Graph
 			mhgaLSTM_cell_graph = MultiHeadGraphAttentionLSTMCell(
-				units = encoer_layer_units[i],
+				units = encoder_layer_units[i],
 				num_heads = num_heads,
 				sequence_length = sequence_length_graph,
 				output_size = d_model,
@@ -111,7 +111,7 @@ def create_att_bottleneck_seq2seq(
 
 			# Image
 			mhaLSTM_cell_image = Conv2DmhaLSTMCell(
-				units = encoer_layer_units[i],
+				units = encoder_layer_units[i],
 				num_heads = num_heads,
 				d_model = d_model,
 				image_dims = NoDependency([curr_image_dims["0"], curr_image_dims["1"], 1]),
@@ -137,7 +137,7 @@ def create_att_bottleneck_seq2seq(
 
 			# Graph
 			mhgaLSTM_cell_graph = MultiHeadGraphAttentionLSTMCell(
-				units = encoer_layer_units[i],
+				units = encoder_layer_units[i],
 				num_heads = num_heads,
 				sequence_length = sequence_length_graph,
 				output_size = d_model,
@@ -206,13 +206,13 @@ def create_att_bottleneck_seq2seq(
 
 	graph_dense = tf.keras.layers.Dense(d_model, activation = "linear")(graph_tokens_sum)
 
-	encoded_vector = (image_dense + graph_dense) / tf.constant(2.)
+	encoded_vector = tf.reshape((image_dense + graph_dense) / tf.constant(2.), (b, 1, d_model))
 
 	# Generic Transformer from "Attention is All You Need": https://arxiv.org/pdf/1706.03762.pdf
 
-	outputs = NoDependency([])
+	outputs = []
 
-	x = tf.zeros_like(encoded_vector)
+	x = tf.zeros((b, 1, d_model))
 
 	for i in range(return_sequence_length):
 
