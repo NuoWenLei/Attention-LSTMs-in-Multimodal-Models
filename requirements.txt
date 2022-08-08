@@ -1,0 +1,3 @@
+networkx==2.5
+plotly-express==0.4.1
+kaleido==0.2.1
