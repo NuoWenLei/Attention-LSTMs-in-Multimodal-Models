@@ -22,6 +22,8 @@ st.set_page_config(
 
 infection_range = (infection_rates.min(), infection_rates.max())
 
+st.header("Infection Rates Map Visualization with Plotly")
+
 inp_date = st.date_input(
 	label = "Infection Map Date (2020/01/01 - 2020/03/31)",
 	value = date(year = 2020, month = 6, day = 12),
@@ -46,6 +48,11 @@ if inp_date is not None:
 		use_container_width = True
 		)
 
-
+with open("infection_rates.npy", "rb") as npy_file:
+	st.download_button(
+		label = "Download State-Level Infection Rates",
+		data = npy_file,
+		file_name = "infection_rates.npy"
+	)
 
 

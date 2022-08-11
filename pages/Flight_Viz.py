@@ -11,6 +11,8 @@ st.set_page_config(
 	page_title = "Flight Viz"
 )
 
+st.header("Domestic Flight Graph Visualization with NumPy")
+
 inp_date = st.date_input(
 	label = "Flight Graph Date (2020/01/01 - 2020/03/31)",
 	value = date(year = 2020, month = 6, day = 12),
@@ -34,6 +36,11 @@ if inp_date is not None:
 
 	st.pyplot(fig = fig, clear_figure = True)
 
-
+with open("flight_filtered.csv", "rb") as f:
+	st.download_button(
+		label = "Download Flight DataFrame",
+		data = f,
+		file_name = "flight.csv"
+	)
 
 
