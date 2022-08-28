@@ -151,24 +151,24 @@ def att_bottleneck_model_builder(hp):
 			# )(x_image)
 
 			x_image = tf.keras.layers.ConvLSTM2D(
-				filters = layer_units[i],
+				filters = d_model,
 				kernel_size = kernel_size,
 				padding = "same",
-				return_sequences = True)(x_image)
+				return_sequences = False)(x_image)
 
 			# update image dimensions if maxpool
-			if use_maxpool:
-				x_image = tf.keras.layers.MaxPool3D((1,maxpool_kernel,maxpool_kernel))(x_image)
-				with hp.conditional_scope("LAYER_NORM", ["Yes"]):
-					if use_layer_norm == "Yes":
-						x_image = tf.keras.layers.LayerNormalization()(x_image)
-				curr_image_dims["0"] = curr_image_dims["0"] // maxpool_kernel
-				curr_image_dims["1"] = curr_image_dims["1"] // maxpool_kernel
-				curr_image_size = curr_image_dims["0"] * curr_image_dims["1"]
+			# if use_maxpool:
+			# 	x_image = tf.keras.layers.MaxPool2D((maxpool_kernel,maxpool_kernel))(x_image)
+			# 	with hp.conditional_scope("LAYER_NORM", ["Yes"]):
+			# 		if use_layer_norm == "Yes":
+			# 			x_image = tf.keras.layers.LayerNormalization()(x_image)
+			# 	curr_image_dims["0"] = curr_image_dims["0"] // maxpool_kernel
+			# 	curr_image_dims["1"] = curr_image_dims["1"] // maxpool_kernel
+			# 	curr_image_size = curr_image_dims["0"] * curr_image_dims["1"]
 
 			# Graph
 			mhgaLSTM_cell_graph = MultiHeadGraphAttentionLSTMCell(
-				units = layer_units[i],
+				units = d_model,
 				num_heads = num_heads,
 				sequence_length = sequence_length_graph,
 				output_size = d_model,
