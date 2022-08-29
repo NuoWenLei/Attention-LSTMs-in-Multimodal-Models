@@ -261,6 +261,265 @@ def att_bottleneck_model_builder(hp):
 
 	return model
 
+def att_bottleneck_model_builder_with_json(hp):
+
+	# global arguments
+	layer_num_per_unit = hp["LAYER_UNITS"]
+	layer_units = (layer_num_per_unit, layer_num_per_unit, layer_num_per_unit)
+	sequence_length = hp["SEQ_LENGTH"]
+	num_heads = hp["NUM_HEADS"]
+	num_pad_tokens = hp["NUM_PAD_TOKENS"]
+	join_layer = hp["JOIN_LAYER"]
+	refresh_pad_tokens = False
+	d_model = hp["D_MODEL"]
+	output_size = hp["OUTPUT_SIZE"]
+	# image arguments
+	image_dims = {
+		"0": 64,
+		"1": 64,
+		"2": 1
+	} # dictionary format to bypass dependency issues when saving model weights
+	# https://github.com/tensorflow/tensorflow/issues/36916
+	kernel_size = hp["CONVLSTM_KERNEL_SIZE"]
+	maxpool_kernel = hp["MAXPOOL_KERNEL"]
+	out_activation_image = hp["IMAGE_ACTIVATION_OUT"]
+	# graph arguments
+	input_shape_nodes = (7, 49, 5)
+	input_shape_edges = (7, 49, 49)
+	sequence_length_graph = hp["SEQ_LENGTH_GRAPH"]
+	residual = True
+	use_bias = True
+	out_activation_graph = hp["GRAPH_ACTIVATION_OUT"]
+	# defaulted image arguments
+	# activation = tf.keras.activations.tanh,
+	# recurrent_activation = tf.keras.activations.hard_sigmoid,
+	# mha_feature_activation: str = "relu",
+	# mha_output_activation: str = "linear",
+	use_maxpool = True
+	use_layer_norm = hp["LAYER_NORM"]
+	attention_norm = hp["ATTENTION_LAYER_NORM"]
+	# defaulted graph arguments
+	concat_output = False
+	# global defaulted arguments
+	name = "Conv2DAttentionLSTMModel"
+
+	# compile arguments
+	lr = hp["LEARNING_RATE"]
+
+	assert join_layer < len(layer_units), "Layer to join is out of bounds"
+
+	# image input
+	input_layer_image = tf.keras.layers.Input(shape = [sequence_length,] + [image_dims["0"], image_dims["1"], 1])
+
+	# graph inputs
+	input_nodes = tf.keras.layers.Input(shape = input_shape_nodes) # nodes
+	input_adj_mats = tf.keras.layers.Input(shape = input_shape_edges) # edges
+
+	# init variables to keep track of image dimension and size
+	curr_image_dims = image_dims
+	curr_image_size = curr_image_dims["0"] * curr_image_dims["1"]
+
+	# get batch shape for reshaping purposes
+	b = tf.shape(input_layer_image)[0]
+
+	# reassign inputs to new variables
+	# to allow these tensors to be self-updated
+	x_image = input_layer_image
+	x_graph = input_nodes
+
+	for i in range(len(layer_units) - 1):
+
+		if i < (join_layer - 1):
+
+			# Image
+			# mhaLSTM_cell_image = Conv2DmhaLSTMCell(
+			# 	units = layer_units[i],
+			# 	num_heads = num_heads,
+			# 	d_model = d_model,
+			# 	image_dims = NoDependency([curr_image_dims["0"], curr_image_dims["1"], 1]),
+			# 	kernel_size = kernel_size,
+			# 	name = f"{name}_mhaLSTMCell_{i}",
+			# 	activation = activation,
+			# 	recurrent_activation = recurrent_activation,
+			# 	mha_feature_activation = mha_feature_activation,
+			# 	mha_output_activation = mha_output_activation
+			# )
+			# x_image = tf.keras.layers.RNN(
+			# 	mhaLSTM_cell_image,
+			# 	return_sequences = True
+			# )(x_image)
+
+			x_image = tf.keras.layers.ConvLSTM2D(
+				filters = layer_units[i],
+				kernel_size = kernel_size,
+				padding = "same",
+				return_sequences = True)(x_image)
+
+			# update image dimensions if maxpool
+			if use_maxpool:
+				x_image = tf.keras.layers.MaxPool3D((1,maxpool_kernel,maxpool_kernel))(x_image)
+				with hp.conditional_scope("LAYER_NORM", ["Yes"]):
+					if use_layer_norm == "Yes":
+						x_image = tf.keras.layers.LayerNormalization()(x_image)
+				curr_image_dims["0"] = curr_image_dims["0"] // maxpool_kernel
+				curr_image_dims["1"] = curr_image_dims["1"] // maxpool_kernel
+				curr_image_size = curr_image_dims["0"] * curr_image_dims["1"]
+
+			# Graph
+			mhgaLSTM_cell_graph = MultiHeadGraphAttentionLSTMCell(
+				units = layer_units[i],
+				num_heads = num_heads,
+				sequence_length = sequence_length_graph,
+				output_size = d_model,
+				residual = residual,
+				concat_output = concat_output,
+				use_bias = use_bias,
+				name = f"{name}_cell_{i}"
+			)
+			x_graph = tf.keras.layers.RNN(
+				mhgaLSTM_cell_graph,
+				return_sequences = True
+			)((x_graph, input_adj_mats))
+
+			with hp.conditional_scope("LAYER_NORM", ["Yes"]):
+				if use_layer_norm == "Yes":
+					x_graph = tf.keras.layers.LayerNormalization()(x_graph)
+
+			# x_graph = tf.keras.layers.LayerNormalization()(x_graph)
+
+
+		# reshape tokens and first pass through MultiHeadAttentionLSTMCell
+		elif i == (join_layer - 1):
+
+			# Image
+			# mhaLSTM_cell_image = Conv2DmhaLSTMCell(
+			# 	units = layer_units[i],
+			# 	num_heads = num_heads,
+			# 	d_model = d_model,
+			# 	image_dims = NoDependency([curr_image_dims["0"], curr_image_dims["1"], 1]),
+			# 	kernel_size = kernel_size,
+			# 	name = f"{name}_mhaLSTMCell_{i}",
+			# 	activation = activation,
+			# 	recurrent_activation = recurrent_activation,
+			# 	mha_feature_activation = mha_feature_activation,
+			# 	mha_output_activation = mha_output_activation
+			# )
+			# x_image = tf.keras.layers.RNN(
+			# 	mhaLSTM_cell_image,
+			# 	return_sequences = False
+			# )(x_image)
+
+			x_image = tf.keras.layers.ConvLSTM2D(
+				filters = d_model,
+				kernel_size = kernel_size,
+				padding = "same",
+				return_sequences = False)(x_image)
+
+			# update image dimensions if maxpool
+			# if use_maxpool:
+			# 	x_image = tf.keras.layers.MaxPool2D((maxpool_kernel,maxpool_kernel))(x_image)
+			# 	with hp.conditional_scope("LAYER_NORM", ["Yes"]):
+			# 		if use_layer_norm == "Yes":
+			# 			x_image = tf.keras.layers.LayerNormalization()(x_image)
+			# 	curr_image_dims["0"] = curr_image_dims["0"] // maxpool_kernel
+			# 	curr_image_dims["1"] = curr_image_dims["1"] // maxpool_kernel
+			# 	curr_image_size = curr_image_dims["0"] * curr_image_dims["1"]
+
+			# Graph
+			mhgaLSTM_cell_graph = MultiHeadGraphAttentionLSTMCell(
+				units = d_model,
+				num_heads = num_heads,
+				sequence_length = sequence_length_graph,
+				output_size = d_model,
+				residual = residual,
+				concat_output = concat_output,
+				use_bias = use_bias,
+				name = f"{name}_cell_{i}"
+			)
+			x_graph = tf.keras.layers.RNN(
+				mhgaLSTM_cell_graph,
+				return_sequences = False
+			)((x_graph, input_adj_mats))
+
+			with hp.conditional_scope("LAYER_NORM", ["Yes"]):
+				if use_layer_norm == "Yes":
+					x_graph = tf.keras.layers.LayerNormalization()(x_graph)
+
+			# x_graph = tf.keras.layers.LayerNormalization()(x_graph)
+
+			# flatten image x and y dimensions
+			#
+			# curr_image_size must be provided
+			# to ensure that the tensor shape for dimension 2 is not None.
+			# If dimension 2 is None, concatenation along that dimension would propagate None shape
+			x_image_tokens = tf.reshape(x_image, (b, curr_image_size, d_model))
+
+			self_attention_tokens = tf.concat([x_image_tokens, tf.zeros((b, num_pad_tokens, d_model)), x_graph], axis = 1)
+
+		# self attention of tokens through MultiHeadAttention
+		else:
+
+			self_attention_tokens = tf.keras.layers.MultiHeadAttention(
+				num_heads = num_heads,
+				key_dim = d_model,
+				attention_axes = 1
+			)(self_attention_tokens, self_attention_tokens)
+
+			with hp.conditional_scope("ATTENTION_LAYER_NORM", ["Yes"]):
+				if attention_norm == 'Yes':
+					self_attention_tokens = tf.keras.layers.LayerNormalization()(self_attention_tokens)
+
+			# if refresh_pad_tokens, reset pad tokens to zeros.
+			if refresh_pad_tokens:
+				self_attention_tokens = tf.concat(
+					[
+						self_attention_tokens[:, :curr_image_size, :],
+						tf.zeros((b, num_pad_tokens, d_model)),
+						self_attention_tokens[:, curr_image_size + num_pad_tokens:, :]],
+						axis = 1)
+
+	# Last MultiHeadAttention
+	mhaLSTM_2 = tf.keras.layers.MultiHeadAttention(
+		num_heads = num_heads,
+		key_dim = d_model,
+		attention_axes = 1
+	)(self_attention_tokens, self_attention_tokens)
+
+	with hp.conditional_scope("ATTENTION_LAYER_NORM", ["Yes"]):
+		if attention_norm == 'Yes':
+			mhaLSTM_2 = tf.keras.layers.LayerNormalization()(mhaLSTM_2)
+
+	# mhaLSTM_2 = tf.keras.layers.LayerNormalization()(mhaLSTM_2)
+
+	# separate tokens based on position
+	image_tokens = mhaLSTM_2[:, :curr_image_size, :]
+
+	graph_tokens = mhaLSTM_2[:, curr_image_size + num_pad_tokens:, :]
+
+	# sum by d_model to preserve as much modality-specific info as possible
+	image_tokens_sum = tf.reduce_sum(image_tokens, axis = 2)
+
+	graph_tokens_sum = tf.reduce_sum(graph_tokens, axis = 2)
+
+	# predict separate regression outputs for each modality and average results
+	image_dense = tf.keras.layers.Dense(output_size, activation = out_activation_image)(image_tokens_sum)
+
+	graph_dense = tf.keras.layers.Dense(output_size, activation = out_activation_graph)(graph_tokens_sum)
+
+	output = (image_dense + graph_dense) / tf.constant(2.)
+
+	model = tf.keras.models.Model(inputs = [input_layer_image, input_nodes, input_adj_mats], outputs = output, name = name)
+
+	opt = tf.keras.optimizers.Adam(learning_rate = lr)
+
+	model.compile(
+		loss = loss_func,
+		optimizer = opt,
+		metrics = ["mae", tf.keras.losses.cosine_similarity]
+	)
+
+	return model
+
 @tf.function
 def loss_func(y_true, y_pred):
 	cosine_sim = tf.keras.losses.cosine_similarity(y_true, y_pred)
