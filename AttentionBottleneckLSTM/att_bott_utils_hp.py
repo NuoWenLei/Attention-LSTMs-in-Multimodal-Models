@@ -358,9 +358,8 @@ def att_bottleneck_model_builder_with_json(hp):
 			# update image dimensions if maxpool
 			if use_maxpool:
 				x_image = tf.keras.layers.MaxPool3D((1,maxpool_kernel,maxpool_kernel))(x_image)
-				with hp.conditional_scope("LAYER_NORM", ["Yes"]):
-					if use_layer_norm == "Yes":
-						x_image = tf.keras.layers.LayerNormalization()(x_image)
+				if use_layer_norm == "Yes":
+					x_image = tf.keras.layers.LayerNormalization()(x_image)
 				curr_image_dims["0"] = curr_image_dims["0"] // maxpool_kernel
 				curr_image_dims["1"] = curr_image_dims["1"] // maxpool_kernel
 				curr_image_size = curr_image_dims["0"] * curr_image_dims["1"]
@@ -381,9 +380,8 @@ def att_bottleneck_model_builder_with_json(hp):
 				return_sequences = True
 			)((x_graph, input_adj_mats))
 
-			with hp.conditional_scope("LAYER_NORM", ["Yes"]):
-				if use_layer_norm == "Yes":
-					x_graph = tf.keras.layers.LayerNormalization()(x_graph)
+			if use_layer_norm == "Yes":
+				x_graph = tf.keras.layers.LayerNormalization()(x_graph)
 
 			# x_graph = tf.keras.layers.LayerNormalization()(x_graph)
 
@@ -441,9 +439,8 @@ def att_bottleneck_model_builder_with_json(hp):
 				return_sequences = False
 			)((x_graph, input_adj_mats))
 
-			with hp.conditional_scope("LAYER_NORM", ["Yes"]):
-				if use_layer_norm == "Yes":
-					x_graph = tf.keras.layers.LayerNormalization()(x_graph)
+			if use_layer_norm == "Yes":
+				x_graph = tf.keras.layers.LayerNormalization()(x_graph)
 
 			# x_graph = tf.keras.layers.LayerNormalization()(x_graph)
 
@@ -465,9 +462,8 @@ def att_bottleneck_model_builder_with_json(hp):
 				attention_axes = 1
 			)(self_attention_tokens, self_attention_tokens)
 
-			with hp.conditional_scope("ATTENTION_LAYER_NORM", ["Yes"]):
-				if attention_norm == 'Yes':
-					self_attention_tokens = tf.keras.layers.LayerNormalization()(self_attention_tokens)
+			if attention_norm == 'Yes':
+				self_attention_tokens = tf.keras.layers.LayerNormalization()(self_attention_tokens)
 
 			# if refresh_pad_tokens, reset pad tokens to zeros.
 			if refresh_pad_tokens:
@@ -485,9 +481,8 @@ def att_bottleneck_model_builder_with_json(hp):
 		attention_axes = 1
 	)(self_attention_tokens, self_attention_tokens)
 
-	with hp.conditional_scope("ATTENTION_LAYER_NORM", ["Yes"]):
-		if attention_norm == 'Yes':
-			mhaLSTM_2 = tf.keras.layers.LayerNormalization()(mhaLSTM_2)
+	if attention_norm == 'Yes':
+		mhaLSTM_2 = tf.keras.layers.LayerNormalization()(mhaLSTM_2)
 
 	# mhaLSTM_2 = tf.keras.layers.LayerNormalization()(mhaLSTM_2)
 
