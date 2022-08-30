@@ -521,6 +521,12 @@ def loss_func(y_true, y_pred):
 	squared_diff_of_mean = tf.square(tf.reduce_mean(y_true, axis = -1) - tf.reduce_mean(y_pred, axis = -1))
 	return cosine_sim + squared_diff_of_mean
 
+@tf.function
+def loss_func_2(y_true, y_pred):
+	mse = tf.reduce_mean(tf.square(y_true - y_pred), axis = -1)
+	squared_diff_of_mean = tf.square(tf.reduce_mean(y_true, axis = -1) - tf.reduce_mean(y_pred, axis = -1))
+	return mse + squared_diff_of_mean
+
 def load_sequential_data_image(maps_path: str,
 metadata_path: str,
 dataset_path: str,
@@ -677,7 +683,8 @@ def load_sequential_data(
 	flight_data_path: str,
 	image_x: int = 128,
 	image_y: int = 128,
-	num_days_per_sample = 7):
+	num_days_per_sample = 7,
+	return_dates = False):
 
 	# create graph sequence data
 	graph_data, unique_dates = load_sequential_data_graph(
@@ -696,7 +703,8 @@ def load_sequential_data(
 		num_days_per_sample,
 		filter_dates = unique_dates
 	)
-	
+	if return_dates:
+		return image_data, graph_data, unique_dates
 	return image_data, graph_data
 
 def build_tuner(name, dir, max_epochs):
