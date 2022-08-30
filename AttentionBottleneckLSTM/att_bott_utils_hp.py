@@ -254,7 +254,7 @@ def att_bottleneck_model_builder(hp):
 	opt = tf.keras.optimizers.Adam(learning_rate = lr)
 
 	model.compile(
-		loss = loss_func,
+		loss = loss_func_3,
 		optimizer = opt,
 		metrics = ["mae", tf.keras.losses.cosine_similarity]
 	)
