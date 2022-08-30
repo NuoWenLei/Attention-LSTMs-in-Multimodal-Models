@@ -508,7 +508,7 @@ def att_bottleneck_model_builder_with_json(hp):
 	opt = tf.keras.optimizers.Adam(learning_rate = lr)
 
 	model.compile(
-		loss = loss_func,
+		loss = loss_func_2,
 		optimizer = opt,
 		metrics = ["mae", tf.keras.losses.cosine_similarity]
 	)
