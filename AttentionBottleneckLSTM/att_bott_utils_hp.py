@@ -530,8 +530,8 @@ def loss_func_2(y_true, y_pred):
 @tf.function
 def loss_func_3(y_true, y_pred):
 	cosine_sim = tf.keras.losses.cosine_similarity(y_true, y_pred)
-	mse = tf.reduce_mean(tf.square(y_true - y_pred), axis = -1) * 10
-	squared_diff_of_mean = tf.square(tf.reduce_mean(y_true, axis = -1) - tf.reduce_mean(y_pred, axis = -1)) * 5
+	mse = tf.reduce_mean(tf.square(y_true - y_pred), axis = -1) * 100
+	squared_diff_of_mean = tf.square(tf.reduce_mean(y_true, axis = -1) - tf.reduce_mean(y_pred, axis = -1)) * 50
 	return mse + squared_diff_of_mean + cosine_sim
 
 def load_sequential_data_image(maps_path: str,
