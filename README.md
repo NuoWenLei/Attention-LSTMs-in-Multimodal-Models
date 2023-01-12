@@ -1,6 +1,6 @@
 # <center>Attention LSTMs in Multimodal Models</center>
 
-## Data Display Link
+## Data Visualization Link
 * https://nuowenlei-attention-lstms-in-multimoda-model-comparison-hoq2rx.streamlit.app/
 
 ## Draft Paper Link
